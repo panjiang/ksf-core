@@ -54,7 +54,7 @@ KSF 系统版本以 [manifest.yaml](../../manifest.yaml) 为准，随包 Node.js
 | `context capabilities` | 一次组织完整有效的协同、搭档发现描述 | 是 | 命令自身只读，不生成索引 |
 | `project list/read/write/remove/check` | 项目根卡与目录的基础管理 | 是 | write 创建或更新根卡；remove 删除整个项目目录；修改支持预览 |
 | `repository create/link/unlink/list/check` | 独立本地 Git 工程与项目关联 | 是 | create 初始化工程；link/unlink 只改根卡；修改支持预览 |
-| `instance init` | 校验 Core 来源、补齐用户种子、本地分支 main | 是 | 支持预览；不提交、推送或改 origin |
+| `instance init` | 校验 Core 来源、补齐用户种子、新建个人 main 并隔离推送目标 | 是 | 支持预览；不提交、推送或改 origin |
 | `release build/publish` | 构建单一 Core 更新包与索引，发布 Core Release | 是 | build 写指定输出；发布写远程；修改支持预览 |
 | `system read/check/update/sync/rollback` | 安装版版本、Release 升级、恢复及回滚 | 是 | update/rollback 修改系统并保留备份；sync 记录检查；支持预览 |
 | `contribute prepare/read/submit` | HEAD 已提交系统差异的审查和干净 Core PR | 是 | prepare 读取 HEAD 及固定远程原版并提示既往 PR；submit 核对基线与重复内容后发布；未提交内容忽略 |

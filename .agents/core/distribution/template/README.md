@@ -1,8 +1,10 @@
 # 我的 KSF 实例
 
-首次使用时，让 Agent 读取根 AGENTS.md。从 Core 模板克隆的仓库先执行 `instance init --json` 验证来源并初始化，再重新取 context entry 进入孵化。你可以一次回复“叫我小林，你叫灵台，其余默认”，设置称呼、实例名、本机名称与登录启动，然后开始处理自己的事情。
+首次使用时，让 Agent 读取根 AGENTS.md。从 Core 模板克隆的仓库先执行 `instance init --json` 验证来源并初始化：保留原 core-main，新建并切换到个人 main，正常推送到自己的 origin/main；再重新取 context entry 进入孵化。远端默认分支可以继续为 core-main。你可以一次回复“叫我小林，你叫灵台，其余默认”，设置称呼、实例名、本机名称与登录启动，然后开始处理自己的事情。
 
 工作台左上角 **KSF → 系统设置 → 快速上手** 提供常驻引导；完整说明见[快速上手](.agents/core/docs/quickstart.md)。关闭页面后后台继续工作，后续登录只启动后台。
+
+换电脑或再次克隆已有个人仓库时，可用 `git clone --branch main <你的个人仓库地址>` 直接取得个人内容。若仍检出初始 core-main，支持恢复的入口会通过 instance init 接续已有 main，不重新孵化或覆盖本地文件。个人 core-main 保留初始模板节点；系统升级以版本凭据记录的准确 Core 提交为准。
 
 这是从唯一的 `ksf-core` 来源初始化的个人 KSF 实例。复制或解压模板后，将目录命名为 `ksf` 或自己选择的名称，即可作为个人 KSF 用户实例使用。从模板创建私有仓库时，也可以使用 `ksf` 或自定义仓库名。
 

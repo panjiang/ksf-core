@@ -28,7 +28,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/ksf.ps1 --help
 
 ## 2. 初始化与定义必要信息
 
-新 Core 模板仓库或更新包先执行固定入口 `instance init --json`，联网验证精确 Core 来源、创建缺少的用户文件，并将本地个人分支改为 `main`。它保留已有个人内容，不提交、推送或修改 origin。完成后重新执行 `context entry --json` 进入孵化。已初始化实例无需重做；完整过程见[实例初始化](../cli/instance.md)。
+新 Core 模板仓库或更新包先执行固定入口 `instance init --json`，联网验证精确 Core 来源、创建缺少的用户文件，并新建、切换到个人 `main`，保留原本地及远端 `core-main`。main 的正常推送目标为自己的 origin/main，首次推送才创建远端 main；远端默认分支保持原样。它保留已有个人内容，不提交、推送或修改远端 URL。完成后重新执行 `context entry --json` 进入孵化。已初始化实例无需重做；完整过程见[实例初始化](../cli/instance.md)。
 
 阅读根USER.md和BOT.md，填写或明确要求Agent维护自己的稳定身份、偏好及协作方式。两份文件保持普通Markdown；技术身份与实例名称另由配置中心维护。
 

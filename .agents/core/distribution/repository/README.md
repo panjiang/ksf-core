@@ -92,7 +92,7 @@ cd ksf
 
 ### 4. 初始化来源，完成首次孵化并打开工作台
 
-Agent 会先执行固定入口的 `instance init --json`，校验准确 Core 来源、补齐缺少的用户文件，并将本地个人分支改为 `main`。它保留已有个人内容，不提交、推送或更换 origin。成功后重新取 `context entry --json` 才进入孵化。
+Agent 会先执行固定入口的 `instance init --json`，校验准确 Core 来源、补齐缺少的用户文件，并新建、切换到个人 `main`，保留原本地和远端 `core-main`。main 正常推送到自己的 origin/main，首次推送才创建远端 main；远端默认分支保持原样。它保留已有个人内容，不提交、推送或更换远端 URL。成功后重新取 `context entry --json` 才进入孵化。
 
 Agent 会引导确认四项：**你的称呼、实例名称、局域网本机名、登录后启动后台**。实例名称也是协作伙伴的默认名字，可以一次回答：
 
@@ -198,6 +198,6 @@ KSF 用“立”字概括支撑这套协作的五个部分：
 
 ## 官方主线与个人实例
 
-Core 是唯一源码、模板和发行入口，官方默认分支为 `core-main`，只保存公共系统内容。个人从 Core 模板创建私有仓库，首次执行 `.agents/ksf instance init --json` 验证原始 Core 提交，补齐个人文件并将本地分支改为 `main`；随后再次执行 `context entry --json` 进入孵化。Windows 使用固定 PowerShell 入口。
+Core 是唯一源码、模板和发行入口，官方默认分支为 `core-main`，只保存公共系统内容。个人从 Core 模板创建私有仓库，首次执行 `.agents/ksf instance init --json` 验证原始 Core 提交，补齐个人文件并新建、切换到 `main`，保留原 core-main 并设置个人推送目标；随后再次执行 `context entry --json` 进入孵化。Windows 使用固定 PowerShell 入口。
 
 个人历史独立；升级按精确 Core SHA 和 Release 执行，系统贡献提取选定公开差异，向 `core-main` 发 PR。分支名不替代版本号与不可变提交。完整协议见[发行与实例](.agents/core/docs/distribution.md)。

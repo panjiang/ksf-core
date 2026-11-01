@@ -5411,10 +5411,10 @@
       "requirements": [],
       "timeoutMs": 600000,
       "seconds": {
-        "darwin": 90,
-        "win32": 120
+        "darwin": 150,
+        "win32": 180
       },
-      "timingBasis": "Scheduling estimate for initialization, provenance and process-crash recovery; native CI timing not yet recorded."
+      "timingBasis": "Scheduling estimate including template initialization, existing-main restoration, origin destination checks and process-crash recovery; timeout unchanged."
     },
     {
       "id": "core:terminal-lifecycle",
