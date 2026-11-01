@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { availableParallelism, tmpdir, homedir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { platform, removePathSync } from '../platform/index.js';
 import { inputFingerprints, fail } from './catalog.js';
@@ -19,6 +19,25 @@ export function testEnvironment(input = process.env) {
 }
 function readJSON(path) { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; } }
 function writeJSON(path, value) { const temporary = `${path}.${randomUUID()}.tmp`; writeFileSync(temporary, JSON.stringify(value, null, 2) + '\n'); renameSync(temporary, path); }
+// An exclusive file is a barrier: drain earlier work, run it alone, then admit
+// later files. Do not backfill past the barrier and starve heavy lifecycle work.
+export async function scheduleTests(items, parallel, run, cancelled) {
+  const active = new Set();
+  for (const item of items) {
+    if (cancelled()) break;
+    if (item.isolation === 'exclusive') {
+      await Promise.all(active);
+      if (cancelled()) break;
+      await run(item);
+    } else {
+      while (active.size >= parallel) await Promise.race(active);
+      if (cancelled()) break;
+      const task = run(item).finally(() => active.delete(task));
+      active.add(task);
+    }
+  }
+  await Promise.all(active);
+}
 export async function executeTestPlan(root, plan, { progress = line => process.stderr.write(line + '\n') } = {}) {
   if (plan.missingDependencies.length) fail('TEST_DEPENDENCIES_MISSING', 'Selected tests have missing locked dependencies. No tests were started.', { missingDependencies: plan.missingDependencies });
   const retention = retainRuntimeArtifacts(root, 'tests');
@@ -30,7 +49,7 @@ export async function executeTestPlan(root, plan, { progress = line => process.s
   // A profile-root scratch directory is shorter than %LOCALAPPDATA%/Temp plus
   // another run/file hierarchy, and is exclusively owned and removed here.
   const temporaryDirectory = mkdtempSync(join(process.platform==='win32'?homedir():tmpdir(), '.ksft-'));
-  const startedAt = new Date().toISOString(), start = performance.now(); let next = 0, cancelled = false;
+  const startedAt = new Date().toISOString(), start = performance.now(); let cancelled = false;
   const stop = child => {
     if (child.exitCode !== null || child.signalCode !== null) return;
     // Detached descendants have their own POSIX process groups. Snapshot the
@@ -76,7 +95,7 @@ export async function executeTestPlan(root, plan, { progress = line => process.s
         let logError;
         try { writeFileSync(log, events.map(e => typeof e === 'string' ? e : JSON.stringify(e)).join('\n') + '\n' + Buffer.concat(stderr).toString('utf8')); }
         catch(error) { status='failed';logError={code:error.code,message:error.message}; }
-        const result = { id: item.id, path: item.path, owner: item.owner, status, exitCode: code, signal, durationMs: Math.round(performance.now() - began), counts, log };
+        const result = { id: item.id, path: item.path, owner: item.owner, isolation: item.isolation ?? 'shared', timeoutMs: item.timeoutMs, status, exitCode: code, signal, durationMs: Math.round(performance.now() - began), counts, log };
         if(logError)result.logError=logError;
         progress(`[${status.toUpperCase()}] ${item.path} (${result.durationMs} ms)`);
         if (status !== 'passed') {
@@ -88,11 +107,9 @@ export async function executeTestPlan(root, plan, { progress = line => process.s
     });
   }
   try {
-    const schedule = plan.tests.map((item,index)=>({item,index})).sort((a,b)=>(b.item.seconds?.[process.platform]??1)-(a.item.seconds?.[process.platform]??1)||a.item.path.localeCompare(b.item.path));
-    const parallel = Math.max(1, Math.min(plan.suite === 'quick' ? 4 : 2, availableParallelism()));
-    await Promise.all(Array.from({ length: Math.min(parallel, plan.tests.length) }, async () => {
-      while (next < schedule.length && !cancelled) { const {item,index}=schedule[next++]; results[index] = await runOne(item, index); }
-    }));
+    const schedule = plan.tests.map((item,index)=>({...item,index})).sort((a,b)=>(b.seconds?.[process.platform]??1)-(a.seconds?.[process.platform]??1)||a.path.localeCompare(b.path));
+    const parallel = plan.execution.maxParallelFiles;
+    await scheduleTests(schedule, parallel, async item => { results[item.index] = await runOne(item, item.index); }, () => cancelled);
   } finally { process.off('SIGINT', onSignal); process.off('SIGTERM', onSignal); for (const child of active) stop(child); }
   for (let i = 0; i < results.length; i++) if (!results[i]) results[i] = { id: plan.tests[i].id, path: plan.tests[i].path, owner: plan.tests[i].owner, status: 'not-executed', durationMs: 0 };
   const after = inputFingerprints(root, plan.catalog, plan.tests), changed = plan.tests.filter(item => before[item.id] !== after[item.id]).map(item => item.path);
@@ -101,7 +118,7 @@ export async function executeTestPlan(root, plan, { progress = line => process.s
   const ok = !cancelled && !changed.length && !cleanupError && results.every(result => ['passed', 'reused'].includes(result.status));
   if (ok) for (let i = 0; i < results.length; i++) if (plan.tests[i].cacheable && results[i].status === 'passed') writeJSON(join(cache, `${before[plan.tests[i].id]}.json`), { schemaVersion: 1, key: before[plan.tests[i].id], runId, result: results[i] });
   const result = { schemaVersion: 1, runId, startedAt, finishedAt: new Date().toISOString(), durationMs: Math.round(performance.now() - start), status: ok ? plan.tests.length ? 'passed' : plan.status : cancelled ? 'cancelled' : changed.length ? 'inputs-changed' : 'failed', complete: ok, platform: process.platform, architecture: process.arch, nodeVersion: process.version, catalogDigest: plan.catalog.digest, suite: plan.suite, scope: plan.scope, component: plan.component, shard: plan.options.shard ?? null, selectedFiles: plan.selectedFiles, assignedFiles: plan.tests.map(t => t.path), requiredFullComponents: plan.requiredFullComponents, excludedPlatform: plan.excludedPlatform, inputFingerprints: before, changedInputs: changed, results, summary: { executed: results.filter(r => !['reused', 'not-executed'].includes(r.status)).length, reused: results.filter(r => r.status === 'reused').length, failed: results.filter(r => !['passed', 'reused'].includes(r.status)).length, platformNotApplicable: plan.excludedPlatform.length }, reportPath: join(directory, 'report.json') };
-  result.gaps=plan.gaps; result.temporaryDirectory = temporaryDirectory; result.cleanupError=cleanupError??null;
+  result.execution=plan.execution;result.gaps=plan.gaps; result.temporaryDirectory = temporaryDirectory; result.cleanupError=cleanupError??null;
   writeJSON(result.reportPath, result);
   const retained = retainRuntimeArtifacts(root, 'tests', { keepRunId: runId });
   for (const error of retained.errors) progress(`Test artifact retention: ${error.code}: ${error.message}`);

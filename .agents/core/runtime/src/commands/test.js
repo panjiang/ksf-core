@@ -26,7 +26,7 @@ export async function runTestCommand(args, root) {
     const options = parseTestOptions(args);
     if (options.help) return { exitCode: 0, stdout: testHelp };
     const plan = createTestPlan(root, options);
-    const publicPlan = { suite: plan.suite, scope: plan.scope, component: plan.component, platform: plan.platform, status: plan.status, changes: plan.changes, reasons: plan.reasons, gaps: plan.gaps, requiredFullComponents: plan.requiredFullComponents, selectedFiles: plan.selectedFiles, assignedFiles: plan.tests.map(t => t.path), excludedPlatform: plan.excludedPlatform, missingDependencies: plan.missingDependencies, catalogDigest: plan.catalog.digest };
+    const publicPlan = { suite: plan.suite, scope: plan.scope, component: plan.component, platform: plan.platform, status: plan.status, execution:plan.execution, changes: plan.changes, reasons: plan.reasons, gaps: plan.gaps, requiredFullComponents: plan.requiredFullComponents, selectedFiles: plan.selectedFiles, assignedFiles: plan.tests.map(t => t.path), excludedPlatform: plan.excludedPlatform, missingDependencies: plan.missingDependencies, catalogDigest: plan.catalog.digest };
     if (options.plan) return { exitCode: 0, stdout: json ? emit(true, { phase: 'plan', ...publicPlan }) : JSON.stringify(publicPlan, null, 2) + '\n' };
     const { ok, result } = await executeTestPlan(root, plan);
     const errors = ok ? [] : [{ code: result.changedInputs.length ? 'TEST_INPUT_CHANGED' : 'TEST_FAILED', message: 'Selected test coverage is incomplete. Inspect the per-file report.' }];

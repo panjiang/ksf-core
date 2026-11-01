@@ -1946,7 +1946,8 @@
         "darwin": 26.04,
         "win32": 117.45
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:chat",
@@ -2483,7 +2484,8 @@
         "darwin": 74.95,
         "win32": 415.9
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:compact-baseline-lifecycle",
@@ -2514,7 +2516,8 @@
         "darwin": 35.8,
         "win32": 207.93
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:compact-baseline",
@@ -2545,7 +2548,8 @@
         "darwin": 27.08,
         "win32": 143.38
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:configuration",
@@ -2690,7 +2694,8 @@
         "darwin": 67.08,
         "win32": 285.29
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:contribute-cache",
@@ -2721,7 +2726,8 @@
         "darwin": 37.56,
         "win32": 175.78
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:contribute-committed-baseline",
@@ -2752,7 +2758,8 @@
         "darwin": 60,
         "win32": 300
       },
-      "timingBasis": "Split seven committed-baseline and legacy-source cases from a native Windows file observed at 556 seconds in CI."
+      "timingBasis": "Split seven committed-baseline and legacy-source cases from a native Windows file observed at 556 seconds in CI.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:contribute-publication",
@@ -2783,7 +2790,8 @@
         "darwin": 57.01,
         "win32": 299.08
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:contribute-recovery",
@@ -2814,7 +2822,8 @@
         "darwin": 38.51,
         "win32": 275.39
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:contribute",
@@ -2845,7 +2854,8 @@
         "darwin": 60,
         "win32": 280
       },
-      "timingBasis": "Six committed-workspace/export cases remain after isolating all seven baseline/legacy cases; preserve all assertions."
+      "timingBasis": "Six committed-workspace/export cases remain after isolating all seven baseline/legacy cases; preserve all assertions.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:contribution-validation",
@@ -3093,7 +3103,8 @@
         "darwin": 147.47,
         "win32": 383.63
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:documentation",
@@ -3418,7 +3429,8 @@
         "darwin": 37.79,
         "win32": 184.86
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:incubation",
@@ -3487,7 +3499,8 @@
         "darwin": 20.22,
         "win32": 119.59
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:knowledge-organize",
@@ -3556,7 +3569,8 @@
         "darwin": 26.45,
         "win32": 205.68
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:windows-launcher",
@@ -3649,7 +3663,8 @@
         "darwin": 42.22,
         "win32": 266.23
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:matched-switch",
@@ -3863,7 +3878,8 @@
         "darwin": 26.3,
         "win32": 175.47
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:object-user-data-lifecycle",
@@ -4352,7 +4368,8 @@
         "darwin": 17.76,
         "win32": 56.18
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:release-actions-recovery",
@@ -4383,7 +4400,8 @@
         "darwin": 38.28,
         "win32": 137.94
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:release-actions",
@@ -4414,7 +4432,8 @@
         "darwin": 19.48,
         "win32": 61.62
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:release-network",
@@ -4445,7 +4464,8 @@
         "darwin": 19.37,
         "win32": 124.84
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:release-publish",
@@ -4476,7 +4496,8 @@
         "darwin": 66.1,
         "win32": 338.83
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:repositories-cli",
@@ -4545,7 +4566,8 @@
         "darwin": 25.39,
         "win32": 165.27
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:repositories",
@@ -4844,7 +4866,8 @@
         "darwin": 53.3,
         "win32": 246.6
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:sources",
@@ -4944,7 +4967,8 @@
         "darwin": 20.57,
         "win32": 108.74
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:system-update-interruption",
@@ -4975,7 +4999,8 @@
         "darwin": 70,
         "win32": 310
       },
-      "timingBasis": "Split estimates from native CI 41184436954 case metrics; retain every I/O, SIGKILL and live-transaction assertion."
+      "timingBasis": "Split estimates from native CI 41184436954 case metrics; retain every I/O, SIGKILL and live-transaction assertion.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:system-update-io-recovery",
@@ -5006,7 +5031,8 @@
         "darwin": 60,
         "win32": 310
       },
-      "timingBasis": "Split estimates from native CI 41184436954 case metrics; retain every I/O, SIGKILL and live-transaction assertion."
+      "timingBasis": "Split estimates from native CI 41184436954 case metrics; retain every I/O, SIGKILL and live-transaction assertion.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:system-update-recovery",
@@ -5037,7 +5063,8 @@
         "darwin": 40,
         "win32": 250
       },
-      "timingBasis": "Remaining four cases after native CI 41184436954 demonstrated the mixed recovery file exceeded its Windows group timeout."
+      "timingBasis": "Remaining four cases after native CI 41184436954 demonstrated the mixed recovery file exceeded its Windows group timeout.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:system-update-root-candidates",
@@ -5068,7 +5095,8 @@
         "darwin": 60,
         "win32": 210
       },
-      "timingBasis": "Split from native CI 41186681465 case diagnostics; preserve all root conflict, candidate and kill recovery cases."
+      "timingBasis": "Split from native CI 41186681465 case diagnostics; preserve all root conflict, candidate and kill recovery cases.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:system-update-root-conflicts",
@@ -5099,7 +5127,8 @@
         "darwin": 50,
         "win32": 150
       },
-      "timingBasis": "Split from native CI 41186681465 case diagnostics; preserve all root conflict, candidate and kill recovery cases."
+      "timingBasis": "Split from native CI 41186681465 case diagnostics; preserve all root conflict, candidate and kill recovery cases.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:system-update-root-interruption",
@@ -5130,7 +5159,8 @@
         "darwin": 80,
         "win32": 250
       },
-      "timingBasis": "Split from native CI 41186681465 case diagnostics; preserve all root conflict, candidate and kill recovery cases."
+      "timingBasis": "Split from native CI 41186681465 case diagnostics; preserve all root conflict, candidate and kill recovery cases.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:system-update-roots",
@@ -5161,7 +5191,8 @@
         "darwin": 60,
         "win32": 240
       },
-      "timingBasis": "Three CLI/launcher policy cases retained after splitting the mixed Windows group observed in CI 41186681465."
+      "timingBasis": "Three CLI/launcher policy cases retained after splitting the mixed Windows group observed in CI 41186681465.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:system-update",
@@ -5189,10 +5220,11 @@
       "requirements": [],
       "timeoutMs": 600000,
       "seconds": {
-        "darwin": 107.85,
-        "win32": 392.61
+        "darwin": 60,
+        "win32": 260
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Conservative scheduling estimate after retaining all 25 scenarios in bounded groups; PR19 run 41301026331 diagnostics plus a fresh per-file seed. Exclusive admission; not a measured standalone duration.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:task-checkpoints",
@@ -5411,10 +5443,11 @@
       "requirements": [],
       "timeoutMs": 600000,
       "seconds": {
-        "darwin": 150,
-        "win32": 180
+        "darwin": 70,
+        "win32": 270
       },
-      "timingBasis": "Scheduling estimate including template initialization, existing-main restoration, origin destination checks and process-crash recovery; timeout unchanged."
+      "timingBasis": "Conservative scheduling estimate after retaining all 25 scenarios in bounded groups; PR19 run 41301026331 diagnostics plus a fresh per-file seed. Exclusive admission; not a measured standalone duration.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:terminal-lifecycle",
@@ -5560,7 +5593,8 @@
         "darwin": 23.21,
         "win32": 168.52
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded.",
+      "isolation": "exclusive"
     },
     {
       "id": "core:user-data",
@@ -6709,6 +6743,166 @@
         "win32": 0.23
       },
       "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+    },
+    {
+      "id": "core:instance-reclone",
+      "path": ".agents/core/runtime/tests/instance-reclone.test.js",
+      "owner": "core",
+      "covers": [
+        "core"
+      ],
+      "suite": "full",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "cacheable": false,
+      "inputs": [
+        ".agents/core",
+        ".github",
+        "AGENTS.md",
+        ".agents/ksf",
+        ".agents/ksf.ps1",
+        ".gitignore",
+        ".gitattributes",
+        "README.md"
+      ],
+      "requirements": [],
+      "timeoutMs": 600000,
+      "seconds": {
+        "darwin": 65,
+        "win32": 280
+      },
+      "timingBasis": "Conservative scheduling estimate after retaining all 25 scenarios in bounded groups; PR19 run 41301026331 diagnostics plus a fresh per-file seed. Exclusive admission; not a measured standalone duration.",
+      "isolation": "exclusive"
+    },
+    {
+      "id": "core:instance-initialization-recovery",
+      "path": ".agents/core/runtime/tests/instance-initialization-recovery.test.js",
+      "owner": "core",
+      "covers": [
+        "core"
+      ],
+      "suite": "full",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "cacheable": false,
+      "inputs": [
+        ".agents/core",
+        ".github",
+        "AGENTS.md",
+        ".agents/ksf",
+        ".agents/ksf.ps1",
+        ".gitignore",
+        ".gitattributes",
+        "README.md"
+      ],
+      "requirements": [],
+      "timeoutMs": 600000,
+      "seconds": {
+        "darwin": 60,
+        "win32": 240
+      },
+      "timingBasis": "Conservative scheduling estimate after retaining all 25 scenarios in bounded groups; PR19 run 41301026331 diagnostics plus a fresh per-file seed. Exclusive admission; not a measured standalone duration.",
+      "isolation": "exclusive"
+    },
+    {
+      "id": "core:instance-source-promotion",
+      "path": ".agents/core/runtime/tests/instance-source-promotion.test.js",
+      "owner": "core",
+      "covers": [
+        "core"
+      ],
+      "suite": "full",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "cacheable": false,
+      "inputs": [
+        ".agents/core",
+        ".github",
+        "AGENTS.md",
+        ".agents/ksf",
+        ".agents/ksf.ps1",
+        ".gitignore",
+        ".gitattributes",
+        "README.md"
+      ],
+      "requirements": [],
+      "timeoutMs": 600000,
+      "seconds": {
+        "darwin": 85,
+        "win32": 350
+      },
+      "timingBasis": "Conservative scheduling estimate after retaining all 25 scenarios in bounded groups; PR19 run 41301026331 diagnostics plus a fresh per-file seed. Exclusive admission; not a measured standalone duration.",
+      "isolation": "exclusive"
+    },
+    {
+      "id": "core:system-update-preservation",
+      "path": ".agents/core/runtime/tests/system-update-preservation.test.js",
+      "owner": "core",
+      "covers": [
+        "core"
+      ],
+      "suite": "full",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "cacheable": false,
+      "inputs": [
+        ".agents/core",
+        ".github",
+        "AGENTS.md",
+        ".agents/ksf",
+        ".agents/ksf.ps1",
+        ".gitignore",
+        ".gitattributes",
+        "README.md"
+      ],
+      "requirements": [],
+      "timeoutMs": 600000,
+      "seconds": {
+        "darwin": 85,
+        "win32": 400
+      },
+      "timingBasis": "Conservative scheduling estimate after retaining all 25 scenarios in bounded groups; PR19 run 41301026331 diagnostics plus a fresh per-file seed. Exclusive admission; not a measured standalone duration.",
+      "isolation": "exclusive"
+    },
+    {
+      "id": "core:system-update-validation",
+      "path": ".agents/core/runtime/tests/system-update-validation.test.js",
+      "owner": "core",
+      "covers": [
+        "core"
+      ],
+      "suite": "full",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "cacheable": false,
+      "inputs": [
+        ".agents/core",
+        ".github",
+        "AGENTS.md",
+        ".agents/ksf",
+        ".agents/ksf.ps1",
+        ".gitignore",
+        ".gitattributes",
+        "README.md"
+      ],
+      "requirements": [],
+      "timeoutMs": 600000,
+      "seconds": {
+        "darwin": 45,
+        "win32": 190
+      },
+      "timingBasis": "Conservative scheduling estimate after retaining all 25 scenarios in bounded groups; PR19 run 41301026331 diagnostics plus a fresh per-file seed. Exclusive admission; not a measured standalone duration.",
+      "isolation": "exclusive"
     }
   ],
   "timingBaseline": {

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync, spawn } from 'node:child_process';
 import { catalogPath, loadCatalog } from '../src/testing/catalog.js';
 import { parseTestOptions, createTestPlan, assignShards } from '../src/testing/planner.js';
-import { executeTestPlan, testEnvironment } from '../src/testing/runner.js';
+import { executeTestPlan, testEnvironment, scheduleTests } from '../src/testing/runner.js';
 import { runTestCommand } from '../src/commands/test.js';
 import { gitBinary, nullDevice } from './helpers/platform.js';
 
@@ -50,6 +50,41 @@ test('shards are deterministic, complete, disjoint and duration-balanced', () =>
   const files = [10,9,8,7,6,5].map((cost, i) => ({ id:String(i),path:String(i),seconds:{darwin:cost} }));
   const bins = assignShards(files, 3, 'darwin'); assert.deepEqual(bins.map(b => b.reduce((n,t)=>n+t.seconds.darwin,0)), [15,15,15]);
   assert.deepEqual(bins, assignShards([...files].reverse(), 3, 'darwin')); assert.equal(new Set(bins.flat().map(t=>t.id)).size, files.length);
+});
+test('exclusive files drain shared work, block following files and release capacity after failure', async () => {
+  const started=[],active=new Set(),gates=new Map(),files=['shared-a','shared-b','exclusive','shared-c'];
+  const work=files.map(id=>({id,isolation:id==='exclusive'?'exclusive':'shared'}));
+  const done=scheduleTests(work,2,async item=>{
+    if(item.isolation==='exclusive')assert.equal(active.size,0);
+    else assert.equal(active.has('exclusive'),false);
+    active.add(item.id);started.push(item.id);
+    await new Promise(resolve=>gates.set(item.id,resolve));active.delete(item.id);
+    return {status:item.id==='exclusive'?'failed':'passed'};
+  },()=>false);
+  const flush=async()=>{for(let n=0;n<8;n++)await Promise.resolve();};
+  assert.deepEqual(started,['shared-a','shared-b']);
+  gates.get('shared-b')();await flush();assert.deepEqual(started,['shared-a','shared-b']);
+  gates.get('shared-a')();await flush();assert.deepEqual(started,['shared-a','shared-b','exclusive']);
+  gates.get('exclusive')();await flush();assert.deepEqual(started,files);
+  gates.get('shared-c')();await done;assert.equal(active.size,0);
+});
+test('cancellation while an exclusive file waits does not launch queued files',async()=>{
+  let cancelled=false,release;const started=[];
+  const done=scheduleTests([{id:'shared'},{id:'exclusive',isolation:'exclusive'},{id:'later'}],2,async item=>{
+    started.push(item.id);await new Promise(resolve=>release=resolve);
+  },()=>cancelled);
+  cancelled=true;release();await done;assert.deepEqual(started,['shared']);
+});
+test('catalog rejects unknown resource policies before starting a test',t=>{
+  const f=fixture(t);f.catalog.tests[0].isolation='exlusive';f.save();
+  assert.throws(()=>loadCatalog(f.root),{code:'TEST_CATALOG_INVALID'});
+});
+test('the plan and execution receipt expose the same exclusive resource budget',async t=>{
+  const f=fixture(t);f.catalog.tests[0].isolation='exclusive';f.save();
+  const args=['--json'],plan=JSON.parse((await runTestCommand(['--plan',...args],f.root)).stdout).data;
+  assert.deepEqual(plan.execution.exclusiveFiles,[f.catalog.tests[0].path]);assert.ok(plan.execution.maxParallelFiles>=1);
+  const result=JSON.parse((await runTestCommand(args,f.root)).stdout).data;
+  assert.deepEqual(result.execution,plan.execution);assert.equal(result.results[0].isolation,'exclusive');assert.equal(result.results[0].timeoutMs,10000);
 });
 test('planning loads no test modules and JSON is one structured envelope', async t => {
   const f = fixture(t); writeFileSync(join(f.root, f.catalog.tests[0].path), 'throw Error("MUST_NOT_IMPORT_WHILE_PLANNING");');

@@ -36,6 +36,7 @@ export function loadCatalog(root) {
   }
   for (const item of catalog.tests) {
     if (!item.id || ids.has(item.id) || files.has(item.path) || !catalog.components[item.owner] || !['quick', 'full'].includes(item.suite) || !Array.isArray(item.inputs) || !Array.isArray(item.covers) || item.covers.some(id => !catalog.components[id]) || !Array.isArray(item.platforms) || !item.platforms.length || !Number.isInteger(item.timeoutMs) || item.timeoutMs < 1) fail('TEST_CATALOG_INVALID', `Invalid or duplicate test declaration: ${item.id ?? item.path}.`);
+    if (item.isolation !== undefined && !['shared', 'exclusive'].includes(item.isolation)) fail('TEST_CATALOG_INVALID', `Unknown test resource policy: ${item.id}.`);
     ids.add(item.id); files.add(item.path);
     const { full } = safePath(root, item.path);
     if (!existsSync(full) || !lstatSync(full).isFile()) fail('TEST_CATALOG_STALE', 'A registered test file is missing.', { target: item.path });
