@@ -2983,6 +2983,76 @@
           }
         ]
       }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.ksf.projects",
+        "name": "KSF项目",
+        "version": "0.2.11",
+        "description": "从现有项目记录接上工作。集中查看项目目标、任务检查点、相关聊天、资料与成果，保留原文和来源。",
+        "author": "KSF",
+        "icon": "package",
+        "sdkVersion": 1,
+        "backend": {
+          "runtime": "node",
+          "entry": "backend/index.mjs",
+          "lifecycle": "on-demand"
+        },
+        "permissions": [
+          "filesystem",
+          "shell",
+          "codex-conversations"
+        ],
+        "window": {
+          "entry": "frontend/index.js",
+          "styles": [
+            "frontend/assets/projects-DjTQwAKm.css"
+          ],
+          "multiInstance": true,
+          "defaultSize": {
+            "width": 1180,
+            "height": 760
+          },
+          "minSize": {
+            "width": 540,
+            "height": 420
+          }
+        },
+        "minCoreVersion": "0.3.2",
+        "dataStores": [
+          {
+            "name": "conversations.json",
+            "scope": "user",
+            "schemaVersion": 1,
+            "migrateFrom": []
+          },
+          {
+            "name": "preferences.json",
+            "scope": "user",
+            "schemaVersion": 1,
+            "migrateFrom": []
+          }
+        ]
+      },
+      "package": {
+        "url": "com.ksf.projects-0.2.11.ksfapp",
+        "sha256": "45c9e12a0a25e986576e81e0559ef47580d2d83bd99baef9ada314cc52f038a9",
+        "size": 234596
+      },
+      "listing": {
+        "subtitle": "从项目目标，接续到下一步。",
+        "description": "集中查看项目概览、任务检查点、相关聊天和资料出处。\n\n保留原始文档与来源，不根据对话猜测任务状态。可以从项目跳转文档和关联聊天，继续当前工作。",
+        "releaseNotes": "修正新实例没有项目时持续显示正在读取的问题，区分加载、空目录与筛选无结果。",
+        "screenshots": [
+          {
+            "url": "media/94860784cdc5c5d51974ed8456d1ef8f9851d084cb5eb4d91dcff574d581ab1b.jpg",
+            "sha256": "94860784cdc5c5d51974ed8456d1ef8f9851d084cb5eb4d91dcff574d581ab1b",
+            "size": 56899,
+            "alt": "虚构项目的目标、任务入口和关联资料"
+          }
+        ]
+      }
     }
   ]
 }

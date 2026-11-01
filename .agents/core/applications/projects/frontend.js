@@ -26,7 +26,7 @@ function markdown(body,refs=[]){
 export async function mount(container,sdk){
   container.classList.add('kp-projects-host');
   let alive=true,list=[],selected='',tab='overview',scope='current',query='',detail=null,taskQuery='',taskState='all',chatData=null,chatRecords=[],taskFile=null,openedTask=null;
-  let request=0,fileRequest=0,listRequest=0,chatRequest=0,error='',listError='',notice='',loading=false,chatLoading=false,fileLoading=false;
+  let request=0,fileRequest=0,listRequest=0,chatRequest=0,error='',listError='',notice='',loading=false,listLoading=true,chatLoading=false,fileLoading=false;
   const root=el('div','ksf-projects');container.append(root);
   const conversation=createConversationPanel(sdk,markdown);
   const sidebar=el('aside','kp-sidebar'),main=el('main','kp-main');sidebar.setAttribute('aria-label','项目目录');root.append(sidebar,main);
@@ -48,13 +48,13 @@ export async function mount(container,sdk){
     projectList.replaceChildren();const entries=list.filter(p=>(scope==='all'||p.scope===scope)&&`${p.title} ${p.name} ${p.description??''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));count.textContent=`${entries.length} 个项目`;
     for(const p of entries){const key=`${p.scope}:${p.name}`,b=btn('',()=>choose(key),'kp-project-item');b.setAttribute('aria-current',key===selected?'true':'false');b.setAttribute('aria-label',p.title+(p.scope==='archived'?'（已归档）':''));const row=el('span','kp-project-title');row.append(el('strong','',p.title),el('i',p.scope==='archived'?'is-archived':''));b.append(row,el('span','kp-project-description',p.description||p.name));projectList.append(b);}
     if(ensureSelected)projectList.querySelector('[aria-current=true]')?.scrollIntoView({block:'nearest'});
-    if(!entries.length)projectList.append(el('p','kp-empty-small',listRequest===1&&!list.length?'正在读取项目…':query?'没有匹配的项目':scope==='archived'?'还没有归档项目':'没有可读取的项目记录'));
+    if(!entries.length)projectList.append(el('p','kp-empty-small',listLoading&&!list.length?'正在读取项目…':query?'没有匹配的项目':scope==='archived'?'还没有归档项目':'没有可读取的项目记录'));
   }
   search.addEventListener('input',()=>{query=search.value;renderList();});
   async function reload(){
-    const token=++listRequest;refresh.disabled=true;listError='';showMessage();
-    try{const result=await sdk.call('list');if(!alive||token!==listRequest)return;list=result.projects.sort((a,b)=>a.scope.localeCompare(b.scope)||a.title.localeCompare(b.title,'zh-CN'));listError=result.warnings?.join('；')??'';renderList();const target=list.some(p=>`${p.scope}:${p.name}`===selected)?selected:list.find(p=>p.scope==='current')?`current:${list.find(p=>p.scope==='current').name}`:list[0]?`${list[0].scope}:${list[0].name}`:'';if(target)await choose(target,false);else{selected='';detail=null;render();}}
-    catch(e){if(alive){listError='项目目录读取失败：'+e.message;showMessage();if(!list.length){content.replaceChildren(el('p','kp-empty','无法读取项目。请点击左下角刷新重试。'));}}}
+    const token=++listRequest;listLoading=true;refresh.disabled=true;listError='';renderList();showMessage();
+    try{const result=await sdk.call('list');if(!alive||token!==listRequest)return;listLoading=false;list=result.projects.sort((a,b)=>a.scope.localeCompare(b.scope)||a.title.localeCompare(b.title,'zh-CN'));listError=result.warnings?.join('；')??'';renderList();const target=list.some(p=>`${p.scope}:${p.name}`===selected)?selected:list.find(p=>p.scope==='current')?`current:${list.find(p=>p.scope==='current').name}`:list[0]?`${list[0].scope}:${list[0].name}`:'';if(target)await choose(target,false);else{selected='';detail=null;render();}}
+    catch(e){if(alive&&token===listRequest){listLoading=false;listError='项目目录读取失败：'+e.message;renderList();showMessage();if(!list.length){content.replaceChildren(el('p','kp-empty','无法读取项目。请点击左下角刷新重试。'));}}}
     finally{if(alive&&token===listRequest){refresh.disabled=false;showMessage();}}
   }
   async function choose(key,persist=true){

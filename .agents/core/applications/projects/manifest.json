@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "com.ksf.projects",
   "name": "KSF项目",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "从现有项目记录接上工作。集中查看项目目标、任务检查点、相关聊天、资料与成果，保留原文和来源。",
   "author": "KSF",
   "icon": "package",

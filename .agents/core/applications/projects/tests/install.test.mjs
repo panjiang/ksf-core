@@ -15,7 +15,7 @@ test('Core project source is distributable; bundled package upgrades the old ide
   assert(!managedPath('.agents/core/applications/projects/node_modules/marked/lib/marked.esm.js'));
   const index=JSON.parse(await readFile(new URL('index.json',sourceStore),'utf8'));
   const previous=index.apps.find(e=>e.manifest.id==='com.ksf.projects'&&e.manifest.version==='0.2.9');
-  const current=index.apps.find(e=>e.manifest.id==='com.ksf.projects'&&e.manifest.version==='0.2.10');assert(previous&&current);assert.equal(current.manifest.name,'KSF项目');
+  const current=index.apps.find(e=>e.manifest.id==='com.ksf.projects'&&e.manifest.version==='0.2.11');assert(previous&&current);assert.equal(current.manifest.name,'KSF项目');
   const bytes=await readFile(new URL(current.package.url,sourceStore)),pkg=decodePackage(bytes);
   assert(pkg.files.get('frontend/THIRD_PARTY_NOTICES.txt').data.toString().includes('## marked@16.4.2'));
   const root=await mkdtemp(join(tmpdir(),'ksf-core-projects-')),store=join(root,'store');await mkdir(store);let manager;
