@@ -897,7 +897,8 @@
         ".agents/ksf.ps1",
         ".gitignore",
         ".gitattributes",
-        "README.md"
+        "README.md",
+        ".agents/core/runtime/tests/ai-recovery-child.mjs"
       ],
       "requirements": [],
       "timeoutMs": 120000,
@@ -6903,6 +6904,29 @@
       },
       "timingBasis": "Conservative scheduling estimate after retaining all 25 scenarios in bounded groups; PR19 run 41301026331 diagnostics plus a fresh per-file seed. Exclusive admission; not a measured standalone duration.",
       "isolation": "exclusive"
+    },
+    {
+      "id": "core:native-fixture-windows",
+      "path": ".agents/core/runtime/tests/native-fixture-windows.test.js",
+      "owner": "core",
+      "covers": [
+        "core"
+      ],
+      "suite": "full",
+      "platforms": [
+        "win32"
+      ],
+      "cacheable": false,
+      "inputs": [
+        ".agents/core/runtime/tests/helpers",
+        ".agents/core/runtime/src/platform"
+      ],
+      "requirements": [],
+      "timeoutMs": 120000,
+      "seconds": {
+        "win32": 5
+      },
+      "timingBasis": "Scheduling estimate for a native fixture containment fault injection; not a measured CI duration."
     }
   ],
   "timingBaseline": {
