@@ -58,10 +58,9 @@ jobs:
         working-directory: .agents/core/runtime/web
         run: npm run build
       - name: Quick verification
+        id: quick
         if: '!inputs.full'
-        run: |
-          node .agents/core/runtime/src/cli.js test --suite quick --json > result.json
-          node .agents/core/runtime/src/testing/ci.js stamp result.json ${{ runner.os }}.report.json
+        run: node .agents/core/runtime/src/testing/ci.js run ${{ runner.os }}.report.json --suite quick
       - name: Freeze prepared toolchains for full shards
         if: inputs.full
         run: tar -cf prepared.tar .agents/core/applications/sdk/node_modules .agents/core/applications/projects/node_modules .agents/core/runtime/web/node_modules .agents/core/runtime/web/dist
@@ -73,7 +72,7 @@ jobs:
           path: prepared.tar
           retention-days: 1
       - uses: actions/upload-artifact@v7.0.2
-        if: '!inputs.full'
+        if: always() && steps.quick.outcome != 'skipped'
         with:
           overwrite: true
           name: quick-${{ runner.os }}
@@ -94,12 +93,20 @@ jobs:
         include:
           - {os: macos-15, platform: macOS, shard: 1/2, id: mac-1}
           - {os: macos-15, platform: macOS, shard: 2/2, id: mac-2}
-          - {os: windows-2025, platform: Windows, shard: 1/4, id: win-1}
-          - {os: windows-2025, platform: Windows, shard: 2/4, id: win-2}
-          - {os: windows-2025, platform: Windows, shard: 3/4, id: win-3}
-          - {os: windows-2025, platform: Windows, shard: 4/4, id: win-4}
+          # Heavy lifecycle files run alone within a machine. Spread them over
+          # machines instead of doubling Git/archive load on one Windows host.
+          - {os: windows-2025, platform: Windows, shard: 1/8, id: win-1}
+          - {os: windows-2025, platform: Windows, shard: 2/8, id: win-2}
+          - {os: windows-2025, platform: Windows, shard: 3/8, id: win-3}
+          - {os: windows-2025, platform: Windows, shard: 4/8, id: win-4}
+          - {os: windows-2025, platform: Windows, shard: 5/8, id: win-5}
+          - {os: windows-2025, platform: Windows, shard: 6/8, id: win-6}
+          - {os: windows-2025, platform: Windows, shard: 7/8, id: win-7}
+          - {os: windows-2025, platform: Windows, shard: 8/8, id: win-8}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      KSF_SKIP_AUTO_UPDATE: '1'
     defaults:
       run:
         shell: bash
@@ -128,10 +135,10 @@ jobs:
       - name: Restore declared local SDK links
         run: node .agents/core/runtime/src/testing/ci.js restore-links
       - name: Full deterministic shard
-        run: |
-          node .agents/core/runtime/src/cli.js test --suite full --shard ${{ matrix.shard }} --json > result.json
-          node .agents/core/runtime/src/testing/ci.js stamp result.json ${{ matrix.id }}.report.json
+        id: tests
+        run: node .agents/core/runtime/src/testing/ci.js run ${{ matrix.id }}.report.json --suite full --shard ${{ matrix.shard }}
       - uses: actions/upload-artifact@v7.0.2
+        if: always() && steps.tests.outcome != 'skipped'
         with:
           overwrite: true
           name: full-${{ matrix.id }}
@@ -148,14 +155,9 @@ jobs:
     needs: [platform, full]
     runs-on: macos-15
     steps:
-      - name: Require every applicable job
-        env:
-          PLATFORM_RESULT: ${{ needs.platform.result }}
-          FULL_RESULT: ${{ needs.full.result }}
-          FULL: ${{ inputs.full }}
-        run: test "$PLATFORM_RESULT" = success && { test "$FULL" != true || test "$FULL_RESULT" = success; }
       - uses: actions/checkout@v7.0.1
       - uses: actions/download-artifact@v8.0.2
+        continue-on-error: true
         with:
           pattern: ${{ inputs.full && 'full-*' || 'quick-*' }}
           path: reports
@@ -164,6 +166,19 @@ jobs:
           .agents/ksf build --json > /dev/null
           ksf_node=$(.agents/ksf hello --json | /usr/bin/plutil -extract runtime.nodePath raw -o - -)
           "$ksf_node" .agents/core/runtime/src/testing/ci.js aggregate reports ${{ inputs.full && 'full' || 'quick' }} proof.json
+      - name: Require every applicable job
+        if: always()
+        env:
+          PLATFORM_RESULT: ${{ needs.platform.result }}
+          FULL_RESULT: ${{ needs.full.result }}
+          FULL: ${{ inputs.full }}
+        run: test "$PLATFORM_RESULT" = success && { test "$FULL" != true || test "$FULL_RESULT" = success; }
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: coverage-${{ github.sha }}
+          path: coverage.json
+          if-no-files-found: error
       - uses: actions/upload-artifact@v7.0.2
         if: inputs.full
         with:

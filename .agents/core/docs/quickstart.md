@@ -29,4 +29,4 @@
 
 打开工作台“系统文档”应用可按五条路线阅读与搜索完整手册；系统设置中也有入口。文件入口为[完整系统文档](README.md)，具体配置见[配置中心](configuration-center.md)、[孵化接口](cli/incubation.md)与[CLI 总览](cli/overview.md)。应用已被停用或卸载时保留你的选择，仍可从文件入口阅读。
 
-从 Core 模板新建的私有仓库先由固定入口执行 `instance init --json`，核实精确来源、补齐用户文件并将本地分支改为 main，再重新执行 context entry 进入首次孵化。该初始化不提交、推送或更换 origin；已有实例不重做。见[初始化命令](cli/instance.md)。
+从 Core 模板新建的私有仓库先由固定入口执行 `instance init --json`，核实精确来源、补齐用户文件并新建、切换到个人 main（保留原 core-main，正常推送目标为 origin/main），再重新执行 context entry 进入首次孵化。该初始化不提交、推送、更换远端 URL 或修改远端默认分支；已有实例不重做。见[初始化命令](cli/instance.md)。

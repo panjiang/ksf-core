@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { relative, resolve } from 'node:path';
 import { realpathSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { gitExecutable } from '../platform/index.js';
 import { fail, loadCatalog, matchesInput, safePath, slash, missingRequirements } from './catalog.js';
 
@@ -92,5 +93,6 @@ export function createTestPlan(root, options, { platform = process.platform, cha
   const selected = tests;
   if (options.shard) { const [index, count] = options.shard.split('/').map(Number); tests = assignShards(tests, count, platform)[index - 1]; }
   const gaps=Object.entries(catalog.components).filter(([id,c])=>c.coverageNotes&&(!options.component||id===options.component)).map(([component,c])=>({component,message:c.coverageNotes}));
-  return { catalog, options, suite: options.suite, scope: options.files ? 'files' : options.changed ? 'changed' : options.component ? 'component' : 'all', component: options.component ?? null, platform, changes: diff, reasons, gaps, requiredFullComponents: [...new Set(requiredFullComponents)].sort(), selectedFiles: selected.map(t => t.path), tests, excludedPlatform: excludedPlatform.map(t => ({ path: t.path, platforms: t.platforms })), missingDependencies: missingRequirements(root, catalog, tests), status: tests.length ? 'ready' : options.shard && selected.length ? 'empty-shard' : 'not-applicable' };
+  const execution={maxParallelFiles:Math.max(1,Math.min(options.suite==='quick'?4:2,availableParallelism())),exclusiveFiles:tests.filter(t=>t.isolation==='exclusive').map(t=>t.path)};
+  return { catalog, options, execution, suite: options.suite, scope: options.files ? 'files' : options.changed ? 'changed' : options.component ? 'component' : 'all', component: options.component ?? null, platform, changes: diff, reasons, gaps, requiredFullComponents: [...new Set(requiredFullComponents)].sort(), selectedFiles: selected.map(t => t.path), tests, excludedPlatform: excludedPlatform.map(t => ({ path: t.path, platforms: t.platforms })), missingDependencies: missingRequirements(root, catalog, tests), status: tests.length ? 'ready' : options.shard && selected.length ? 'empty-shard' : 'not-applicable' };
 }

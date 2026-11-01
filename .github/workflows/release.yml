@@ -135,6 +135,7 @@ jobs:
           .agents/ksf runtime verify --json
           ksf_node=$(.agents/ksf hello --json | /usr/bin/plutil -extract runtime.nodePath raw -o - -)
           "$ksf_node" .agents/core/runtime/src/distribution/release-actions.js inspect
+          .agents/ksf release publish "$KSF_RELEASE_DIRECTORY" --dry-run --json
           if ! .agents/ksf release publish "$KSF_RELEASE_DIRECTORY" --json > "$KSF_RELEASE_RESULT"; then
             cat "$KSF_RELEASE_RESULT"
             printf 'Core publication failed or is unknown. Reconcile this same version and artifact before retrying.\n' >> "$GITHUB_STEP_SUMMARY"

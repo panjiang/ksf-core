@@ -2,9 +2,10 @@ import {gitEnvironment} from './committed-source.js';
 import {acquireServiceLock} from '../services/service-lock.js';
 import { existsSync, mkdirSync, readFileSync, rmSync, openSync, closeSync, writeFileSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { configuration } from './configuration.js';
-import { installedManifest, releaseReceipt } from './manifests.js';
+import { installedManifest, releaseReceipt, validateManifest } from './manifests.js';
 import { gitExecutable } from '../platform/index.js';
 import { GitHubAPI } from './github.js';
 import { isRevision, isBranch } from './git-values.js';
@@ -20,16 +21,30 @@ function git(root, args, required = true) {
   const result = spawnSync(gitExecutable, ['--no-replace-objects', '-C', root, ...args], { encoding: 'utf8', timeout: 30000,
     env: gitEnvironment() });
   if (required && result.status !== 0) fail('INSTANCE_GIT_INVALID', 'Cannot inspect the instance Git repository.');
-  return result.status === 0 ? result.stdout.trim() : null;
+  return result.status === 0 ? result.stdout.replace(/\r?\n$/, '') : null;
 }
 function ownsGitRoot(root) {
   const top = git(root, ['rev-parse', '--show-toplevel'], false);
   return top !== null && realpathSync.native(top) === realpathSync.native(root);
 }
+function isCoreRemote(remote, config) {
+  if (!remote) return false;
+  let path;
+  const scp = /^git@github\.com:(.+)$/i.exec(remote);
+  if (scp) path = scp[1];
+  else {
+    try {
+      const url = new URL(remote);
+      if (!['https:', 'http:', 'ssh:', 'git:'].includes(url.protocol) || !['github.com', 'ssh.github.com'].includes(url.hostname.toLowerCase())) return false;
+      path = decodeURIComponent(url.pathname);
+    } catch { return false; }
+  }
+  return path.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '').toLowerCase() === config.core_repository.toLowerCase();
+}
 export function isCoreSource(root, config = configuration(root)) {
   if (!ownsGitRoot(root)) return false;
   const remote = git(root, ['remote', 'get-url', 'origin'], false);
-  return remote !== null && [ `git@github.com:${config.core_repository}.git`, `https://github.com/${config.core_repository}.git`, `https://github.com/${config.core_repository}` ].includes(remote);
+  return isCoreRemote(remote, config);
 }
 export function needsInstanceInitialization(root) {
   if (existsSync(checkedPath(root, stateFile))) return true;
@@ -61,11 +76,130 @@ async function templateRevision(root, config, api, revision) {
   fail('INSTANCE_SOURCE_UNVERIFIED', 'The initial tree was not found on the Core stable line. Supply --revision for an older verified Core template; no files were changed.');
 }
 const stateFile = '.agents/runtime-data/instance-initialization/transaction.json';
+const instanceGitConfig = [
+  ['push.default', 'current'], ['branch.main.remote', 'origin'],
+  ['branch.main.merge', 'refs/heads/main'], ['branch.main.pushRemote', 'origin'],
+];
+function configValues(root, key, local = true) {
+  const raw = git(root, ['config', ...(local ? ['--local'] : []), '--null', '--get-all', key], false);
+  return raw === null ? [] : raw.split('\0').slice(0, -1);
+}
+const sameValues = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+function planInstanceGit(root, branch, target, { targetHead, resume = false } = {}) {
+  if (branch === null) return null;
+  if (branch === '') fail('INSTANCE_BRANCH_INVALID', 'Select a local branch before initializing the instance.');
+  const existing = git(root, ['rev-parse', '--verify', `refs/heads/${target}`], false);
+  if (branch !== target && existing && (!resume || existing !== targetHead)) fail('INSTANCE_BRANCH_CONFLICT', 'The personal main branch already exists; select it before initialization.');
+  // An explicit push refspec or mirror overrides push.default. Preserve custom
+  // settings and stop rather than accidentally sending personal data to Core.
+  if (configValues(root, 'remote.origin.push', false).length || git(root, ['config', '--bool', '--get', 'remote.origin.mirror'], false) === 'true') {
+    fail('INSTANCE_PUSH_CONFIG_CONFLICT', 'Review the origin push refspec or mirror setting before initializing; no Git settings were changed.');
+  }
+  const pushURLs = git(root, ['remote', 'get-url', '--push', '--all', 'origin'], false)?.split('\n') ?? [];
+  if (pushURLs.some(url => isCoreRemote(url, configuration(root)))) fail('INSTANCE_PUSH_CONFIG_CONFLICT', 'The origin push destination includes the official Core; preserve the remote settings and select a personal repository.');
+  const config = instanceGitConfig.map(([key, value]) => ({ key, before: configValues(root, key), after: [value] }));
+  if (config.some(item => item.before.length > 1)) fail('INSTANCE_PUSH_CONFIG_CONFLICT', 'Preserve the multi-valued branch or push settings for review before initializing.');
+  const head = git(root, ['rev-parse', 'HEAD']);
+  return { branchBefore: branch, branchAfter: target, head, targetHead: targetHead ?? head, resume, created: branch !== target && !existing,
+    refLogMessage: `ksf instance init ${randomUUID()}`, config };
+}
+function existingInstance(root, config) {
+  if (!ownsGitRoot(root)) return null;
+  const branch = git(root, ['branch', '--show-current']), target = config.instance_branch ?? 'main';
+  if (!branch || branch === target) return null;
+  const local = git(root, ['rev-parse', '--verify', `refs/heads/${target}`], false);
+  const targetHead = local ?? git(root, ['rev-parse', '--verify', `refs/remotes/origin/${target}`], false);
+  if (!targetHead) {
+    const fetch = configValues(root, 'remote.origin.fetch', false);
+    const fullFetch = 'refs/heads/*:refs/remotes/origin/*';
+    if (configValues(root, 'remote.origin.url', false).length &&
+        (!fetch.length || fetch.some(spec => spec !== fullFetch && spec !== `+${fullFetch}`))) {
+      fail('INSTANCE_BRANCH_CONFLICT', 'The origin fetch mapping may hide an existing personal main. Fetch all origin branches or clone the existing main explicitly before initialization.');
+    }
+    return null;
+  }
+  let receipt;
+  try { receipt = validateManifest(JSON.parse(git(root, ['show', `${targetHead}:.agents/core/release.json`], false))); }
+  catch { fail('INSTANCE_BRANCH_CONFLICT', 'An existing personal main has no valid installed Core receipt; preserve it and select or repair that branch before initialization.'); }
+  if (receipt.development || receipt.instance_initialization || receipt.core.repository !== config.core_repository ||
+      git(root, ['merge-base', '--is-ancestor', 'HEAD', targetHead], false) === null) {
+    fail('INSTANCE_BRANCH_CONFLICT', 'The existing main is not an initialized descendant of this template snapshot; preserve both branches for review.');
+  }
+  if (git(root, ['status', '--porcelain', '--untracked-files=no']) !== '') fail('INSTANCE_BRANCH_CONFLICT', 'Save the tracked working-tree and index changes before restoring the existing personal main.');
+  return { receipt, git: planInstanceGit(root, branch, target, { targetHead, resume: true }) };
+}
+function validateInstanceGit(state) {
+  if (state === null) return;
+  if (!state || !isBranch(state.branchBefore) || state.branchAfter !== 'main' || !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(state.head) || !/^ksf instance init [a-f0-9-]{36}$/.test(state.refLogMessage) ||
+      !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(state.targetHead ?? state.head) || typeof state.created !== 'boolean' ||
+      (state.resume !== undefined && typeof state.resume !== 'boolean') ||
+      (state.resume ? state.branchBefore === state.branchAfter : state.created !== (state.branchBefore !== state.branchAfter) || (state.targetHead ?? state.head) !== state.head) ||
+      !Array.isArray(state.config) || state.config.length !== instanceGitConfig.length ||
+      state.config.some((item, index) => item.key !== instanceGitConfig[index][0] || !Array.isArray(item.before) || item.before.length > 1 || item.before.some(value => typeof value !== 'string' || value.includes('\0')) || !sameValues(item.after, [instanceGitConfig[index][1]]))) {
+    fail('INSTANCE_RECOVERY_INVALID', 'Preserve the incomplete instance Git transaction for inspection.');
+  }
+}
+function checkInstanceGitRecovery(root, state) {
+  if (!state) return;
+  const branch = git(root, ['branch', '--show-current'], false);
+  const before = git(root, ['rev-parse', '--verify', `refs/heads/${state.branchBefore}`], false);
+  const after = git(root, ['rev-parse', '--verify', `refs/heads/${state.branchAfter}`], false);
+  if (!ownsGitRoot(root) || ![state.branchBefore, state.branchAfter].includes(branch) || before !== state.head ||
+      (after !== null && after !== (state.targetHead ?? state.head)) || (branch === state.branchAfter && after === null) ||
+      (!state.created && after === null) ||
+      (state.resume && git(root, ['status', '--porcelain', '--untracked-files=no']) !== '') ||
+      (state.created && after !== null && git(root, ['reflog', 'show', '-1', '--format=%gs', `refs/heads/${state.branchAfter}`], false) !== state.refLogMessage) ||
+      state.config.some(item => { const actual = configValues(root, item.key); return !sameValues(actual, item.before) && !sameValues(actual, item.after); })) {
+    fail('INSTANCE_RECOVERY_CONFLICT', 'The instance branch or Git settings changed during initialization; preserve the transaction and local commits.');
+  }
+}
+function applyInstanceGit(root, state) {
+  if (!state) return;
+  if (git(root, ['branch', '--show-current']) !== state.branchBefore || git(root, ['rev-parse', 'HEAD']) !== state.head ||
+      state.config.some(item => !sameValues(configValues(root, item.key), item.before))) fail('INSTANCE_INPUT_CHANGED', 'Git changed during initialization.');
+  const target = git(root, ['rev-parse', '--verify', `refs/heads/${state.branchAfter}`], false);
+  if (state.created ? target !== null : target !== (state.targetHead ?? state.head)) fail('INSTANCE_INPUT_CHANGED', 'The personal main reference changed during initialization.');
+  if (state.created) {
+    git(root, ['update-ref', '--create-reflog', '-m', state.refLogMessage, `refs/heads/${state.branchAfter}`, state.targetHead ?? state.head, '0'.repeat(state.head.length)]);
+  }
+  if (state.branchBefore !== state.branchAfter && git(root, ['switch', '--no-overwrite-ignore', state.branchAfter], false) === null) fail('INSTANCE_BRANCH_CONFLICT', 'Cannot switch to personal main without replacing local files; preserve tracked, untracked and ignored files before retrying.');
+  if (git(root, ['rev-parse', 'HEAD']) !== (state.targetHead ?? state.head)) fail('INSTANCE_INPUT_CHANGED', 'The personal branch changed during initialization.');
+  for (const item of state.config) git(root, ['config', '--local', '--replace-all', item.key, item.after[0]]);
+  if (state.config.some(item => git(root, ['config', '--get', item.key], false) !== item.after[0])) fail('INSTANCE_PUSH_CONFIG_CONFLICT', 'Higher-priority Git settings override the personal main push target.');
+}
+function restoreInstanceGit(root, state) {
+  if (!state) return;
+  checkInstanceGitRecovery(root, state);
+  for (const item of [...state.config].reverse()) {
+    if (sameValues(configValues(root, item.key), item.before)) continue;
+    git(root, ['config', '--local', ...(item.before.length ? ['--replace-all', item.key, item.before[0]] : ['--unset-all', item.key])]);
+  }
+  if (state.branchBefore !== state.branchAfter && git(root, ['branch', '--show-current']) === state.branchAfter) git(root, ['switch', '--no-overwrite-ignore', state.branchBefore]);
+  if (state.created) {
+    // Compare-and-delete only our untouched new ref; retain any pre-existing
+    // branch settings instead of deleting the entire section with branch -d.
+    if (git(root, ['rev-parse', '--verify', `refs/heads/${state.branchAfter}`], false) !== null) git(root, ['update-ref', '-d', `refs/heads/${state.branchAfter}`, state.targetHead ?? state.head]);
+  }
+}
 function recoverInitialization(root) {
   const state = readJSON(root, stateFile, true);
   if (!state) return;
   const allowed = new Set(['README.md', '.gitignore', '.gitattributes', ...workspaceDocuments, ...userDirectories.map(path => `${path}/.gitkeep`), '.agents/core/release.json']);
-  if (state.schema_version !== 1 || !Array.isArray(state.files) || state.files.some(file => !allowed.has(file.path) || !/^[a-f0-9]{64}$/.test(file.after_sha256) || !(file.before === null || typeof file.before === 'string')) || (state.branchBefore && !isBranch(state.branchBefore)) || state.branchAfter !== 'main') fail('INSTANCE_RECOVERY_INVALID', 'Preserve the incomplete initialization transaction for inspection.');
+  if (![1, 2, 3].includes(state.schema_version) || !Array.isArray(state.files) || state.files.some(file => !allowed.has(file.path) || !/^[a-f0-9]{64}$/.test(file.after_sha256) || !(file.before === null || typeof file.before === 'string')) || (state.branchBefore && !isBranch(state.branchBefore)) || state.branchAfter !== 'main') fail('INSTANCE_RECOVERY_INVALID', 'Preserve the incomplete initialization transaction for inspection.');
+  if (state.schema_version >= 2) {
+    validateInstanceGit(state.git);
+    if (state.git?.branchBefore !== (state.branchBefore ?? undefined) || (state.git && state.git.branchAfter !== state.branchAfter)) fail('INSTANCE_RECOVERY_INVALID', 'The recorded instance branch transaction is inconsistent.');
+    checkInstanceGitRecovery(root, state.git);
+  } else if (state.branchBefore) {
+    // Legacy rename records did not pin HEAD. Only the unchanged original
+    // clone reference can prove that no personal commit would be renamed.
+    const original = git(root, ['rev-parse', '--verify', `refs/remotes/origin/${state.branchBefore}`], false);
+    const branch = git(root, ['branch', '--show-current'], false);
+    if (!ownsGitRoot(root) || !original || git(root, ['rev-parse', 'HEAD'], false) !== original ||
+        ![state.branchBefore, state.branchAfter].includes(branch)) {
+      fail('INSTANCE_RECOVERY_CONFLICT', 'The legacy initialization did not record HEAD; preserve files and personal commits unless the original origin reference still matches.');
+    }
+  }
   // Only restore a file that still has the value this operation wrote.
   for (const file of [...state.files].reverse()) {
     const target = checkedPath(root, file.path), bytes = readRegular(root, file.path, true);
@@ -74,7 +208,8 @@ function recoverInitialization(root) {
     if (!bytes || sha256(bytes) !== file.after_sha256) fail('INSTANCE_RECOVERY_CONFLICT', `Initialization encountered a concurrent edit: ${file.path}.`);
     if (before === null) rmSync(target); else writeAtomic(target, before, file.before_mode);
   }
-  if (state.branchBefore && git(root, ['branch', '--show-current'], false) === state.branchAfter) git(root, ['branch', '-m', state.branchBefore]);
+  if (state.schema_version >= 2) restoreInstanceGit(root, state.git);
+  else if (state.branchBefore && git(root, ['branch', '--show-current'], false) === state.branchAfter) git(root, ['branch', '-m', state.branchBefore]);
   rmSync(checkedPath(root, stateFile));
 }
 async function initializeInstanceOperation({ root, revision, dryRun = false, api, fetcher, fault }) {
@@ -84,6 +219,13 @@ async function initializeInstanceOperation({ root, revision, dryRun = false, api
   if (current && !current.instance_initialization) return { initialized: true, changed: false, core: current.core, version: current.version };
   if (current?.development) fail('DEVELOPMENT_PACKAGE', 'Use the local build instance directory for an explicit development trial; a development archive is not an official instance source.');
   if (isCoreSource(root, config)) fail('INSTANCE_CORE_SOURCE', 'The official Core checkout is a source repository; create a private repository from its template first.');
+  const existing = !current && existingInstance(root, config);
+  if (existing) {
+    const result = { initialized: true, changed: false, dryRun, resumed: true, core: existing.receipt.core, version: existing.receipt.version,
+      branch: existing.git.branchAfter, previousBranch: existing.git.branchBefore, createdBranch: existing.git.created, pushTarget: 'origin/main', files: [], preserved: [] };
+    if (dryRun) return { ...result, wouldChange: true };
+    return applyInitialization(root, result, [], existing.git, fault);
+  }
   const github = api ?? new GitHubAPI({ readOnly: true, fetcher });
   const receipt = current ? releaseReceipt(current) : { schema_version: 5, origin: 'core-template', launcher_protocol: 1, name: 'ksf-core', product: 'ksf-core',
     version: JSON.parse(readRegular(root, '.agents/core/build.json')).version, platform: `${process.platform}-${process.arch}`,
@@ -117,12 +259,15 @@ async function initializeInstanceOperation({ root, revision, dryRun = false, api
   const receiptBytes = readRegular(root, '.agents/core/release.json', true);
   files.push({ path: '.agents/core/release.json', bytes: Buffer.from(stableJSON(receipt)), before: receiptBytes?.toString('base64') ?? null, before_mode: 0o644 });
   const branch = ownsGitRoot(root) ? git(root, ['branch', '--show-current'], false) : null, targetBranch = config.instance_branch ?? 'main';
-  if (branch && branch !== targetBranch && git(root, ['rev-parse', '--verify', `refs/heads/${targetBranch}`], false)) fail('INSTANCE_BRANCH_CONFLICT', 'The personal main branch already exists; select it before initialization.');
-  if (branch === '') fail('INSTANCE_BRANCH_INVALID', 'Select a local branch before initializing the instance.');
-  const result = { initialized: true, changed: false, dryRun, core: receipt.core, version: receipt.version,
-    branch: targetBranch, previousBranch: branch, files: files.map(file => file.path), preserved };
+  const instanceGit = planInstanceGit(root, branch, targetBranch);
+  const result = { initialized: true, changed: false, dryRun, resumed: false, core: receipt.core, version: receipt.version,
+    branch: targetBranch, previousBranch: branch, createdBranch: instanceGit?.created ?? false,
+    pushTarget: instanceGit ? 'origin/main' : null, files: files.map(file => file.path), preserved };
   if (dryRun) return { ...result, wouldChange: true };
-  const state = { schema_version: 1, branchBefore: branch, branchAfter: targetBranch,
+  return applyInitialization(root, result, files, instanceGit, fault);
+}
+function applyInitialization(root, result, files, instanceGit, fault) {
+  const state = { schema_version: 3, branchBefore: result.previousBranch, branchAfter: result.branch, git: instanceGit,
     files: files.map(({ bytes, ...file }) => ({ ...file, after_sha256: sha256(bytes) })) };
   const transaction = checkedPath(root, stateFile);
   mkdirSync(join(root, '.agents/runtime-data/instance-initialization'), { recursive: true });
@@ -131,7 +276,7 @@ async function initializeInstanceOperation({ root, revision, dryRun = false, api
   catch (error) { if (error.code === 'EEXIST') fail('INSTANCE_INITIALIZATION_BUSY', 'Another initialization transaction exists; preserve it and retry.'); throw error; }
   finally { if (descriptor !== undefined) closeSync(descriptor); }
   try {
-    if (branch && branch !== targetBranch) git(root, ['branch', '-m', targetBranch]);
+    applyInstanceGit(root, instanceGit); fault?.('git:branch');
     for (const file of files) {
       const actual = readRegular(root, file.path, true), expected = file.before === null ? null : Buffer.from(file.before, 'base64');
       if (actual === null ? expected !== null : expected === null || !actual.equals(expected)) fail('INSTANCE_INPUT_CHANGED', `File changed during initialization: ${file.path}.`);

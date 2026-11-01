@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createWorkbenchAI } from '../src/services/ai-tasks.js';
 test('C09/C14 fixture: killed service leaves a supervised CLI receipt; restart reconciles instead of replaying',async t=>{
   const root=await mkdtemp(join(tmpdir(),'ksf-ai-crash-')),path=join(root,'codex');let restored;
-  writeNodeExecutable(path,`#!${process.execPath}\nif(process.argv.includes('--version')){console.log('codex-cli 0.163.0');process.exit(0);}console.log(JSON.stringify({type:'thread.started',thread_id:'crash-fixture'}));await new Promise(r=>setTimeout(r,30000));\n`);
+  writeNodeExecutable(path,`#!${process.execPath}\nif(process.argv.includes('--version')){console.log('codex-cli 0.163.0');process.exit(0);}console.log(JSON.stringify({type:'thread.started',thread_id:'crash-fixture'}));await new Promise(r=>setTimeout(r,30000));\n`,{containChildren:true});
   const child=fork(fileURLToPath(new URL('./ai-recovery-child.mjs',import.meta.url)),[root,path],{execArgv:[],stdio:['ignore','ignore','ignore','ipc']});
   t.after(async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await restored?.close();await rm(root,{recursive:true,force:true});});
   let id;
