@@ -22,7 +22,7 @@ Core 的业务协议、对象/项目、能力路由、聊天状态、任务归�
 
 三方文本合并使用随包 MIT `node-diff3` 3.2.1，来源、摘要和许可在 `runtime/src/vendor/node-diff3/`，保持 local/base/release 冲突格式。升级不依赖系统安装的 diff3。
 
-Windows Desktop CLI 已实测 `0.165.0-alpha.1.2` 的本地认证、App Server、IPC 和真实托管 AI 执行；兼容表只增加这个 Windows 精确版本。稳定 0.163.x 原有范围保持。新版本应先做实际协议与执行验收，不能直接放宽到全部 alpha。
+Windows Desktop CLI 已实测 `0.165.0-alpha.1.2` 的本地认证、App Server、IPC 和真实托管 AI 执行；`0.166.0-alpha.5.1` 在 Windows 原生首次初始化、会话接续、后台账号认证及飞轮托管 AI 的事件流与最终输出验收通过。兼容表按 Windows 精确版本登记，后者的 Desktop IPC 验收仍单独记录。稳定 0.163.x 原有范围保持。新版本应先做实际协议与执行验收，不能直接放宽到全部 alpha。
 
 Desktop URI 操作需要 当前用户的交互会话；SSH 会话可访问命名管道及 CLI，但系统可能拒绝启动桌面 URI。工作台入口以当前用户 Interactive Token 启动；启用自启动后添加当前用户登录触发器。发现会话持有者时只对暂时无客户端和超时进行有界只读重试；发送结果未知时保留回执并对账，不自动重发。
 
@@ -53,7 +53,7 @@ Mac 可使用 `ssh -N -L 1313:127.0.0.1:1313 user@windows-host`，然后访问 `
 应用应发布一个通用 `.ksfapp`，macOS 与 Windows 安装相同 SHA256 的包。应用业务、界面、状态格式和调用参数不按操作系统分叉；平台特性由工作台宿主实现。新清单严格按 SDK v1 校验；需要原生平台约束时可声明 `target` / `nodeAbi`。
 
 - `context.services.call('terminal', method, [input])`：create/list/read/write/resize/close。宿主从已验证的窗口租约注入 runtimeId/instanceId，应用不传 PID 或选择所有者。终端尺寸、UTF-8 数据、输出游标和退出回执共享；Shell、登录参数、ConPTY/PTY、原生二进制由宿主选择。窗口关闭、租约过期和后端进程退出都会清理该窗口会话；其他窗口不受影响。SDK v1 后端按应用共享；终端资源按窗口租约隔离。
-- `context.services.call('git', method, args)`：Git 应用仅调用公共服务。仓库发现、可执行文件、环境清理、进程树、工作区写入锁和操作回执由工作台处理。回执继续保存在原应用的 `operations.json`，应用升级不迁移格式，关闭窗口不取消已受理操作。
+- `context.services.call('git', method, args)`：Git 应用仅调用公共服务。仓库发现、可执行文件、环境清理、进程树、工作区写入锁和操作回执由工作台处理。回执位于 `.agents/runtime-data/applications/data/com.ksf.git/operations.json`，避免回执写入反过来改变实例仓库的 Git 版本；首次使用会复制旧用户区回执并保留原件，继续核对既有请求，不重发历史操作。关闭窗口不取消已受理操作。
 - `context.services.call('projects', 'list'|'read'|'tasks', [input])`：宿主直接调用共享项目与任务服务；项目应用不再生成 Shell/PowerShell 命令。
 - `context.storage.read(name)` 返回 `{exists,text,etag,path}`；`write(name,text,{ifMatch?})` 返回 `{etag,path}`。宿主限定到调用应用的数据目录，只接受普通 `.json/.md/.txt` 文件和 8 MiB 以内文本；同目录原子替换、fsync、原生重试及进程锁共用实现。ifMatch 可为 null，表示文件须尚不存在；冲突保留原件。SDK `createJSONStore` 继续负责业务校验、迁移和 revision，通过宿主保存。独立 Node 测试的旧 context 保留便携式文件后备实现。
 

@@ -117,9 +117,10 @@ export function createTasks(store,{rules=()=>null,outgoingOffer,match=()=>({offe
     if(input.status){clauses.push(field('status')+'=?');params.push(input.status);}
     if(input.query){check(typeof input.query==='string'&&input.query.length<=512,'检索内容过长。');clauses.push('id IN (SELECT id FROM tasks_search WHERE text LIKE ?)');params.push('%'+input.query.toLocaleLowerCase().replaceAll('%','').replaceAll('_','')+'%');}
     const ended=field('status')+" IN ('completed','declined','cancelled')";
-    if(['attention','accepted'].includes(input.view)){clauses.push(field('assignee')+'=?','NOT ('+ended+')');params.push(store.owner);}
+    // An unconfigured instance may read history, but cannot claim owned tasks.
+    if(['attention','accepted'].includes(input.view)){clauses.push(field('assignee')+'=?','NOT ('+ended+')');params.push(store.owner??null);}
     if(input.view==='attention')clauses.push('('+field('nextActor')+"='B' OR "+field('paused')+'=1 OR '+field('terminationRequested')+'=1)');
-    if(input.view==='sent'){clauses.push(field('requester')+'=?','NOT ('+ended+')');params.push(store.owner);}
+    if(input.view==='sent'){clauses.push(field('requester')+'=?','NOT ('+ended+')');params.push(store.owner??null);}
     if(input.view==='history')clauses.push(ended);
     const where=clauses.length?' WHERE '+clauses.join(' AND '):'';
     return {tasks:db.prepare('SELECT body FROM tasks'+where+' ORDER BY updated DESC,id LIMIT ? OFFSET ?').all(...params,limit,offset).map(r=>JSON.parse(r.body)),total:db.prepare('SELECT count(*) n FROM tasks'+where).get(...params).n,offset,limit};

@@ -10,11 +10,8 @@ export class PublicationAPI {
   }
   async request(method, path, body, options) {
     this.calls.push({ method, path, body, options });
-    if (path === '/repos/yinbaiyuan/ksf-workspace' && method === 'GET') return { full_name: 'yinbaiyuan/ksf-workspace', default_branch: 'main', is_template: true };
-    if (path.includes('/contents/.ksf-template.json')) return { encoding: 'base64', content: Buffer.from(stableJSON({ ...this.provenance, generated_from: this.wrongTemplate ? 'someone/else' : this.provenance.generated_from })).toString('base64') };
-    if (path.includes('/contents/.agents/core/release.json')) return { encoding: 'base64', content: Buffer.from(this.badReceipt ? '{}' : this.receipt).toString('base64') };
-    if (path === '/installation/repositories') return { total_count: 1, repositories: [{ full_name: 'yinbaiyuan/ksf-workspace' }] };
-    if (path.includes('/git/commits/') && method === 'GET') return this.commits.get(path.split('/').at(-1)) ?? { sha: path.split('/').at(-1), tree: { sha: 'a'.repeat(40) } };
+    if (path.includes('/git/commits/') && method === 'GET') { const sha = path.split('/').at(-1); this.sourceSHA = sha; return { sha, tree: { sha: 'a'.repeat(40) } }; }
+    if (path.includes('/git/ref/heads/core-main') && method === 'GET') return { object: { sha: this.sourceSHA } };
     if (path.includes('/git/ref/tags/') && method === 'GET') return this.tag;
     if (path.endsWith('/git/refs') && method === 'POST') return this.tag = { object: { type: 'commit', sha: body.sha } };
     if (path.includes('/releases/tags/') && method === 'GET') return this.release;
@@ -27,24 +24,6 @@ export class PublicationAPI {
       return asset;
     }
     if (path.endsWith('/releases/7') && method === 'PATCH') { this.release.draft = body.draft; return this.release; }
-    if (path.includes('/git/ref/heads/') && method === 'GET') {
-      if (++this.headReads === 2 && this.concurrent) this.head = '9'.repeat(40);
-      return { object: { sha: this.head } };
-    }
-    if (path.endsWith('/git/blobs')) return { sha: 'f'.repeat(40) };
-    if (path.endsWith('/git/trees')) {
-      this.pendingProvenance = JSON.parse(body.tree.find(e => e.path === '.ksf-template.json').content);
-      this.pendingReceipt = body.tree.find(e => e.path === '.agents/core/release.json').content;
-      return { sha: 'b'.repeat(40) };
-    }
-    if (path.endsWith('/git/commits') && method === 'POST') {
-      const result = { sha: 'c'.repeat(40), tree: { sha: body.tree } }; this.commits.set(result.sha, result); return result;
-    }
-    if (path.includes('/git/refs/heads/') && method === 'PATCH') {
-      this.head = body.sha; this.provenance = this.pendingProvenance; this.receipt = this.pendingReceipt;
-      if (this.failRef) { this.failRef = false; throw Object.assign(new Error('unknown ref response'), { code: 'GITHUB_REQUEST_FAILED' }); }
-      return { object: { sha: body.sha } };
-    }
     throw new Error(`Unexpected publication fixture call: ${method} ${path}`);
   }
 }

@@ -1,3 +1,4 @@
+import {repositoryExports} from './repository-exports.js';
 import { createHash } from 'node:crypto';
 import { fail } from './errors.js';
 import { isRevision } from './git-values.js';
@@ -70,5 +71,15 @@ export async function resolveBaseline(manifest, { api, fetcher } = {}) {
     if (gitBlobID(bytes) !== entry.sha || (record.sha256 && sha256(bytes) !== record.sha256)) fail('BASELINE_MISMATCH', `Original Core content differs: ${record.source_path}.`);
     return bytes;
   };
-  return { ...manifest, files, read };
+  const readSource = async path => {
+    if (!Object.values(repositoryExports).includes(path)) fail('BASELINE_PATH_INVALID', 'Only explicit Core repository exports can be read.');
+    const entry = (await originalTree()).get(path);
+    if (!entry) return null;
+    if (entry.type !== 'blob' || !['100644', '100755'].includes(entry.mode)) fail('BASELINE_UNVERIFIED', 'Invalid Core repository export.');
+    const blob = await client().request('GET', `/repos/${repository}/git/blobs/${entry.sha}`);
+    const bytes = Buffer.from(blob.content ?? '', 'base64');
+    if (blob.encoding !== 'base64' || blob.sha !== entry.sha || gitBlobID(bytes) !== entry.sha) fail('BASELINE_UNVERIFIED', 'Core repository export identity differs.');
+    return { bytes, mode: Number.parseInt(entry.mode, 8) & 0o777 };
+  };
+  return { ...manifest, files, read, readSource };
 }

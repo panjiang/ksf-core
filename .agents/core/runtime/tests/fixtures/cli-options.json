@@ -1087,28 +1087,30 @@
     "args": [
       "publish",
       "out",
-      "--release-only"
+      "--dry-run"
     ],
     "expected": {
       "value": {
         "operation": "publish",
         "target": "out",
-        "releaseOnly": true
+        "dryRun": true
       }
     }
   },
   {
     "module": "distribution",
     "method": "parseDistributionArgs",
-    "prefix": "release",
+    "prefix": "instance",
     "args": [
-      "mirror",
-      "--source=x"
+      "init",
+      "--revision=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "--dry-run"
     ],
     "expected": {
       "value": {
-        "operation": "mirror",
-        "source": "x"
+        "operation": "init",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "dryRun": true
       }
     }
   },
@@ -1117,12 +1119,12 @@
     "method": "parseDistributionArgs",
     "prefix": "release",
     "args": [
-      "template",
+      "publish",
       "--help"
     ],
     "expected": {
       "value": {
-        "operation": "template",
+        "operation": "publish",
         "help": true
       }
     }

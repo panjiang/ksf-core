@@ -1,0 +1,54 @@
+name: Verify Core
+on:
+  push:
+    branches: [core-main]
+  pull_request:
+    branches: [core-main]
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Run all deterministic native tests
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: verify-core-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  plan:
+    if: github.repository == 'yinbaiyuan/ksf-core'
+    runs-on: macos-15
+    outputs:
+      full: ${{ steps.plan.outputs.full }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          KSF_MANUAL_FULL: ${{ inputs.full || false }}
+          KSF_TEST_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          .agents/ksf build --json > /dev/null
+          ksf_node=$(.agents/ksf hello --json | /usr/bin/plutil -extract runtime.nodePath raw -o - -)
+          if [ -n "$KSF_TEST_BASE" ] && [ "$KSF_TEST_BASE" != 0000000000000000000000000000000000000000 ]; then
+            "$ksf_node" .agents/core/runtime/src/testing/ci.js plan "$KSF_TEST_BASE"
+          else
+            KSF_MANUAL_FULL=true "$ksf_node" .agents/core/runtime/src/testing/ci.js plan
+          fi
+  verification:
+    needs: plan
+    uses: ./.github/workflows/verification.yml
+    with:
+      full: ${{ needs.plan.outputs.full == 'true' }}
+  required:
+    if: always() && github.repository == 'yinbaiyuan/ksf-core'
+    needs: [plan, verification]
+    runs-on: macos-15
+    steps:
+      - env:
+          PLAN: ${{ needs.plan.result }}
+          VERIFICATION: ${{ needs.verification.result }}
+        run: test "$PLAN" = success && test "$VERIFICATION" = success

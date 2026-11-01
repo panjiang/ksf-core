@@ -69,12 +69,30 @@ export function splitHunks(patch) {
   }
   return chunks;
 }
+export async function createPersistedWorkbenchGit(root, files, coordinator, storage) {
+  const caller = {appId: 'com.ksf.git'}, name = 'operations.json', scope = {scope: 'runtime'};
+  const current = await storage.read(caller, name, scope);
+  const record = current.exists ? current : await storage.read(caller, name);
+  let ledger = [];
+  if (record.exists) {
+    try { ledger = JSON.parse(record.text); }
+    catch { throw problem('APP_DATA_INVALID', 'Git 操作记录无效，请保留原件。'); }
+    assert(Array.isArray(ledger), 'APP_DATA_INVALID', 'Git 操作记录无效，请保留原件。');
+    // Preserve the old user-data record, but never mutate the repository while
+    // recording an operation: its own receipt must not invalidate the Git CAS.
+    if (!current.exists) await storage.write(caller, name, record.text, {...scope, ifMatch: null});
+  }
+  return createWorkbenchGit(root, files, coordinator, {
+    ledger, persist: value => storage.write(caller, name, JSON.stringify(value), scope),
+  });
+}
 export function createWorkbenchGit(root, files, coordinator, { command = runGit, now = Date.now, ledger = [], persist = async () => {} } = {}) {
   root = files.root;
   const repositories = new Map(), snapshots = new Map(), operations = new Map(), requests = new Map(), summaries = new Map();
   for(const item of ledger){if(!item?.operation?.id||!item.requestId)continue;const operation=item.operation;if(['queued','running'].includes(operation.status)){operation.status='failed';operation.error={code:'GIT_OPERATION_INTERRUPTED',message:'服务中断，请先核对仓库结果。',uncertain:true};}operations.set(operation.id,operation);requests.set(item.requestId,{id:operation.id,fingerprint:item.fingerprint});}
   const checkpoint=()=>persist([...requests].map(([requestId,item])=>({requestId,fingerprint:item.fingerprint,operation:operations.get(item.id)})));
   const summaryEpochs = new Map(), summaryQueue = new Set(), summaryJobs = new Map();
+  const operationJobs = new Set();
   const summaryTTL = 30000, discoveryTTL = 60000;
   let scanPromise, scanAt = -Infinity, scanErrors = [], scanning = false, closed = false;
   const epoch = id => summaryEpochs.get(id) ?? 0;
@@ -376,12 +394,14 @@ export function createWorkbenchGit(root, files, coordinator, { command = runGit,
     const operation = { id: randomUUID(), repo: repo.id, action: request.action, status: 'queued', progress: '', startedAt: new Date().toISOString(), result: null, error: null };
     operations.set(operation.id, operation); requests.set(request.requestId, { id: operation.id, fingerprint });
     await checkpoint();
-    void coordinator.run(repo.absolute, async () => {
+    const job = coordinator.run(repo.absolute, async () => {
       operation.status = 'running';
       try { operation.result = await execute(request, operation); operation.status = 'completed'; }
       catch (error) { operation.status = 'failed'; operation.error = { code: error.code ?? 'GIT_IO_FAILED', message: redact(error.message), uncertain: ['GIT_TIMEOUT', 'GIT_OUTPUT_LIMIT'].includes(error.code) }; }
       finally { operation.finishedAt = new Date().toISOString(); await checkpoint(); }
     }).catch(async error=>{operation.status='failed';operation.error={code:error.code??'GIT_IO_FAILED',message:redact(error.message),uncertain:true};operation.finishedAt=new Date().toISOString();await checkpoint();});
+    operationJobs.add(job);
+    void job.finally(() => operationJobs.delete(job)).catch(() => {});
     // Keep a bounded session ledger; entries are never silently rerun on reconnect.
     if (operations.size > 500) for (const [id, item] of operations) if (['completed', 'failed'].includes(item.status)) { operations.delete(id); for (const [key, r] of requests) if (r.id === id) requests.delete(key); if (operations.size <= 400) break; }
     return operation;
@@ -389,6 +409,6 @@ export function createWorkbenchGit(root, files, coordinator, { command = runGit,
   return { list, scan, status, diff, history, commit, tree, refs, conflict, stashDetail, start, invalidate, settings:settings.read,
     async owner(path) { await files.locate(path); await scan(); const repo = [...repositories.values()].filter(r => r.valid && (r.path === '.' || path.startsWith(r.path + '/'))).sort((a, b) => b.path.length - a.path.length)[0]; assert(repo, 'GIT_OWNER_MISSING', '此文件没有所属 Git 仓库。', 404); return { repo: repo.id, path: repo.path === '.' ? path : path.slice(repo.path.length + 1) }; },
     operation(id) { const operation = operations.get(id); assert(operation, 'GIT_OPERATION_UNKNOWN', '操作记录已失效或服务已重启，请重新读取仓库核对结果。', 404); return operation; },
-    async close() { closed = true; summaryQueue.clear(); await scanPromise; await Promise.all(summaryJobs.values()); while ([...operations.values()].some(o => o.status === 'running' || o.status === 'queued')) await new Promise(r => setTimeout(r, 20)); },
+    async close() { closed = true; summaryQueue.clear(); await scanPromise; await Promise.all(summaryJobs.values()); await Promise.all(operationJobs); },
   };
 }

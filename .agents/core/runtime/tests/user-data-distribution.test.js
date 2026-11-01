@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { distributionFixture, repository } from './helpers/distribution-fixture.js';
+import { distributionFixture, repository, instanceEntries } from './helpers/distribution-fixture.js';
 import { readUserData, writeUserData } from '../src/services/user-data.js';
 import { systemRead, systemUpdate, systemRollback } from '../src/distribution/system.js';
 import { buildRelease } from '../src/distribution/release.js';
@@ -36,7 +36,7 @@ test('release reads only Core defaults and generates an empty user-data director
   const identityPath = join(f.root, '.agents/user-data/identity.json'); writeFileSync(identityPath, canary);
   const built = await buildRelease({ root: f.root, output: join(f.directory, 'empty-user-data-template') });
   const core = readArchive(readFileSync(join(built.output, `ksf-core-0.1.0-${fixtureTarget}.tar.gz`)));
-  const workspace = readArchive(readFileSync(join(built.output, `ksf-workspace-0.1.0-${fixtureTarget}.tar.gz`)));
+  const workspace = instanceEntries(built.instance);
   assert.equal(workspace.get('.agents/user-data/.gitkeep').bytes.length, 0);
   assert.equal(core.has('.agents/user-data/.gitkeep'), false);
   assert.equal(workspace.has('.agents/user-data/settings.json'), false);

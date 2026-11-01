@@ -259,8 +259,9 @@
     },
     {
       "id": "git-operation-ledger",
-      "root": ".agents/user-data/applications/data/com.ksf.git",
+      "root": ".agents/runtime-data/applications/data/com.ksf.git",
       "legacyRoots": [
+        ".agents/user-data/applications/data/com.ksf.git",
         ".agents/user-data/applications/data/git"
       ],
       "pattern": "^operations\\.json$",
@@ -326,7 +327,8 @@
         1,
         2,
         3,
-        4
+        4,
+        5
       ],
       "recursive": true,
       "maxDepth": 1
@@ -444,6 +446,16 @@
       ],
       "recursive": true,
       "maxDepth": 1
+    },
+    {
+      "id": "instance-initialization",
+      "root": ".agents/runtime-data/instance-initialization",
+      "pattern": "^transaction\\.json$",
+      "versionField": "schema_version",
+      "versions": [
+        1
+      ],
+      "recursive": false
     }
   ]
 }

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { inspectHandoff, recoverPublishedBundle, templatePreflight, reportPublication } from '../src/distribution/release-actions.js';
+import { inspectHandoff, recoverPublishedBundle, corePreflight, reportPublication } from '../src/distribution/release-actions.js';
 import { inspectReleaseDirectory } from '../src/distribution/publish.js';
 import { createArchive, readArchive } from '../src/distribution/archive.js';
 import { sha256, stableJSON } from '../src/distribution/common.js';
@@ -12,7 +12,7 @@ import { distributionFixture, repository } from './helpers/distribution-fixture.
 import { PublicationAPI } from './helpers/publication-api.js';
 import YAML from '../src/vendor/yaml/dist/index.js';
 function published(f) {
-  const files = new Map(['ksf-core-release.json', ...Object.values(f.first.index.platforms[fixtureTarget]).map(d => d.name)]
+  const files = new Map(['ksf-core-index.json', 'ksf-core-release.json', ...Object.values(f.first.index.platforms[fixtureTarget]).map(d => d.name)]
     .map(name => [name, readFileSync(join(f.first.output, name))]));
   const base = 'https://github.com/yinbaiyuan/ksf-core/releases/download/v0.1.0/';
   const release = { draft: false, tag_name: 'v0.1.0', assets: [...files].map(([name, bytes]) => ({ name, size: bytes.length, digest: `sha256:${sha256(bytes)}`, browser_download_url: base + name })) };
@@ -26,47 +26,28 @@ function published(f) {
   const fetcher = async url => { downloads.push(String(url)); return new Response(files.get(new URL(url).pathname.split('/').at(-1))); };
   return { files, release, calls, downloads, api, fetcher };
 }
-function rewriteWorkspace(f, change) {
-  const index = structuredClone(f.first.index), descriptor = index.platforms[fixtureTarget].workspace;
-  const entries = readArchive(readFileSync(join(f.first.output, descriptor.name)));
-  change(entries);
-  const bytes = createArchive([...entries.values()]);
-  descriptor.size = bytes.length; descriptor.sha256 = sha256(bytes);
-  writeFileSync(join(f.first.output, descriptor.name), bytes);
-  writeFileSync(join(f.first.output, 'ksf-core-release.json'), stableJSON(index));
-}
-
-test('handoff freezes Core commit and index, and refuses a changed bundle', async t => {
-  const f = await distributionFixture(t);
-  const identity = inspectHandoff({ root: f.root, directory: f.first.output, revision: f.first.coreRevision });
-  assert.equal(identity.tag, 'v0.1.0');
-  assert.throws(() => inspectHandoff({ root: f.root, directory: f.first.output, revision: 'f'.repeat(40) }), { code: 'RELEASE_SOURCE_INVALID' });
+test('frozen single-Core handoff and read-only recovery retain the exact artifacts', async t => {
+  const f = await distributionFixture(t), identity = inspectHandoff({ root: f.root, directory: f.first.output });
+  assert.equal(identity.revision, f.first.coreRevision);
   assert.throws(() => inspectHandoff({ root: f.root, directory: f.first.output, indexHash: 'f'.repeat(64) }), { code: 'RELEASE_INPUT_CHANGED' });
-  writeFileSync(join(f.first.output, 'ksf-core-release.json'), stableJSON({ ...f.first.index, development: true }));
-  assert.throws(() => inspectHandoff({ root: f.root, directory: f.first.output }), { code: 'RELEASE_INVALID' });
+  const p = published(f), directory = join(f.directory, 'recovered');
+  const result = await recoverPublishedBundle({ root: f.root, directory, tag: 'v0.1.0', ...p });
+  assert.deepEqual(result, identity); assert.equal(p.downloads.length, 3);
+  for (const [name, bytes] of p.files) assert.deepEqual(readFileSync(join(directory, name)), bytes);
 });
-
-test('template preflight checks App scope and generated provenance with GET requests only', async t => {
-  const f = await distributionFixture(t), api = new PublicationAPI();
-  const result = await templatePreflight({ root: f.root, api });
-  assert.equal(result.accessVerified, true);
-  assert.ok(api.calls.every(call => call.method === 'GET'));
-  for (const [version, code] of [['9.0.0', 'TEMPLATE_VERSION_OLDER'], ['0.1.0', 'TEMPLATE_VERSION_CONFLICT']]) {
-    const conflict = new PublicationAPI({ provenance: { generated_from: 'yinbaiyuan/ksf-core', version, revision: 'f'.repeat(40) } });
-    await assert.rejects(templatePreflight({ root: f.root, directory: f.first.output, api: conflict }), { code });
-    assert.ok(conflict.calls.every(call => call.method === 'GET'));
+test('Core preflight requires its own template and stable default branch', async t => {
+  const f = await distributionFixture(t);
+  for (const [is_template, default_branch, succeeds] of [[true, 'core-main', true], [false, 'core-main', false], [true, 'main', false]]) {
+    const api = { request: async (method, path) => { assert.equal(method, 'GET'); assert.equal(path, '/repos/yinbaiyuan/ksf-core'); return { full_name: 'yinbaiyuan/ksf-core', is_template, default_branch }; } };
+    if (succeeds) assert.equal((await corePreflight({ root: f.root, api })).template, true);
+    else await assert.rejects(corePreflight({ root: f.root, api }), { code: 'CORE_REPOSITORY_INVALID' });
   }
-  await assert.rejects(templatePreflight({ root: f.root, api: new PublicationAPI({ wrongTemplate: true }) }), { code: 'TEMPLATE_NOT_GENERATED' });
-  const wrong = { request: async () => ({ total_count: 2, repositories: [{ full_name: 'yinbaiyuan/ksf-workspace' }, { full_name: 'someone/private' }] }) };
-  await assert.rejects(templatePreflight({ root: f.root, api: wrong }), { code: 'TEMPLATE_AUTH_SCOPE_INVALID' });
-  await assert.rejects(templatePreflight({ root: f.root, api: { request: async () => { throw Object.assign(new Error('permission denied'), { code: 'GITHUB_PERMISSION_DENIED' }); } } }), { code: 'GITHUB_PERMISSION_DENIED' });
 });
 
-test('template-only recovers the exact published assets without a build, latest lookup or remote write', async t => {
-  const f = await distributionFixture(t), p = published(f), output = join(f.directory, 'recovered');
-  const result = await recoverPublishedBundle({ root: f.root, directory: output, tag: 'v0.1.0', ...p });
-  assert.equal(result.revision, f.first.coreRevision);
-  for (const [name, bytes] of p.files) assert.deepEqual(readFileSync(join(output, name)), bytes);
-  assert.equal(p.downloads.length, 3); assert.equal(p.calls.length, 3);
-  assert.ok(p.calls.every(call => !call.path.includes('latest')));
+test('exact release recovery uses the frozen package targets rather than a newer publisher build',async t=>{
+  const f=await distributionFixture(t),p=published(f),current=JSON.parse(readFileSync(join(f.root,'.agents/core/build.json')));
+  current.runtime.packages['future-platform']={archive_path:'not-present',archive_sha256:'f'.repeat(64)};
+  writeFileSync(join(f.root,'.agents/core/build.json'),JSON.stringify(current));
+  const result=await recoverPublishedBundle({root:f.root,directory:join(f.directory,'old-frozen-release'),tag:'v0.1.0',...p});
+  assert.equal(result.revision,f.first.coreRevision);assert.ok(p.calls.every(call=>call.method==='GET'));
 });

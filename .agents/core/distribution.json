@@ -1,10 +1,10 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "core_repository": "yinbaiyuan/ksf-core",
-  "core_branch": "main",
-  "template_repository": "yinbaiyuan/ksf-workspace",
-  "release_source": "https://github.com/yinbaiyuan/ksf-core/releases/latest/download/ksf-core-release.json",
-  "index_asset": "ksf-core-release.json",
+  "core_branch": "core-main",
+  "release_source": "https://github.com/yinbaiyuan/ksf-core/releases/latest/download/ksf-core-index.json",
+  "index_asset": "ksf-core-index.json",
   "check_interval_seconds": 86400,
-  "request_timeout_seconds": 10
+  "request_timeout_seconds": 10,
+  "instance_branch": "main"
 }

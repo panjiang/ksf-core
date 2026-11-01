@@ -3,17 +3,6 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      operation:
-        description: Publish Core and template, or recover only an existing release's template
-        type: choice
-        options: [release, template-only]
-        default: release
-        required: true
-      release_tag:
-        description: Exact published tag for template-only (for example v0.1.1)
-        type: string
-        required: false
 permissions:
   contents: read
   actions: read
@@ -22,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   find-proof:
-    if: github.repository == 'yinbaiyuan/ksf-core' && inputs.operation != 'template-only'
+    if: github.repository == 'yinbaiyuan/ksf-core'
     runs-on: macos-15
     outputs:
       valid: ${{ steps.verify.outputs.valid }}
@@ -52,16 +41,13 @@ jobs:
         run: node .agents/core/runtime/src/testing/ci.js verify-proof trusted-proof/proof.json "$KSF_PROOF_RUN"
   verification:
     needs: find-proof
-    if: needs.find-proof.outputs.valid != 'true' && inputs.operation != 'template-only'
+    if: github.repository == 'yinbaiyuan/ksf-core' && needs.find-proof.outputs.valid != 'true'
     uses: ./.github/workflows/verification.yml
     with:
       full: true
   prepare:
     needs: [find-proof, verification]
-    if: >-
-      ${{ !cancelled() && github.repository == 'yinbaiyuan/ksf-core' &&
-          (inputs.operation == 'template-only' || needs.find-proof.outputs.valid == 'true' ||
-           needs.verification.result == 'success') }}
+    if: ${{ !cancelled() && github.repository == 'yinbaiyuan/ksf-core' && (needs.find-proof.outputs.valid == 'true' || needs.verification.result == 'success') }}
     runs-on: macos-15
     timeout-minutes: 90
     outputs:
@@ -69,7 +55,6 @@ jobs:
       revision: ${{ steps.bundle.outputs.revision }}
       index: ${{ steps.bundle.outputs.index_sha256 }}
       artifact: ${{ steps.upload.outputs.artifact-id }}
-      publisher: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -78,68 +63,38 @@ jobs:
       - name: Verify source and prepare bundled runtime
         env:
           KSF_RELEASE_DIRECTORY: ${{ runner.temp }}/ksf-release
-          KSF_OPERATION: ${{ inputs.operation || 'release' }}
-          KSF_RELEASE_TAG: ${{ inputs.release_tag }}
           KSF_REF_TYPE: ${{ github.ref_type }}
           KSF_REF_NAME: ${{ github.ref_name }}
         run: |
-          case "$KSF_OPERATION" in
-            release)
-              test -z "$KSF_RELEASE_TAG" || { echo 'release_tag is only valid for template-only'; exit 1; }
-              ksf_version=$(/usr/bin/plutil -extract version raw -o - .agents/core/build.json)
-              if [ "$KSF_REF_TYPE" = tag ]; then test "$KSF_REF_NAME" = "v$ksf_version"; fi
-              ;;
-            template-only)
-              test -n "$KSF_RELEASE_TAG" || { echo 'template-only requires release_tag'; exit 1; }
-              ;;
-            *) echo 'Unknown release operation'; exit 1 ;;
-          esac
+          ksf_version=$(/usr/bin/plutil -extract version raw -o - .agents/core/build.json)
+          if [ "$KSF_REF_TYPE" = tag ]; then test "$KSF_REF_NAME" = "v$ksf_version"; fi
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/core-main
           .agents/ksf build --json > /dev/null
           .agents/ksf runtime verify --json
           ksf_node=$(.agents/ksf hello --json | /usr/bin/plutil -extract runtime.nodePath raw -o - -)
           printf 'KSF_RELEASE_NODE=%s\n' "$ksf_node" >> "$GITHUB_ENV"
           dirname "$ksf_node" >> "$GITHUB_PATH"
       - name: Install SDK test dependencies
-        if: inputs.operation != 'template-only'
         working-directory: .agents/core/applications/sdk
         run: npm ci --ignore-scripts
       - name: Install frontend dependencies
-        if: inputs.operation != 'template-only'
         working-directory: .agents/core/runtime/web
         run: npm ci
       - name: Build frontend for the final artifact
-        if: inputs.operation != 'template-only'
         working-directory: .agents/core/runtime/web
         run: npm run build
-      - name: Build once or recover the exact published bundle
+      - name: Build the single Core bundle
         id: bundle
         env:
           KSF_RELEASE_DIRECTORY: ${{ runner.temp }}/ksf-release
-          KSF_OPERATION: ${{ inputs.operation || 'release' }}
-          KSF_RELEASE_TAG: ${{ inputs.release_tag }}
           KSF_EXPECTED_REVISION: ${{ github.sha }}
           KSF_GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if [ "$KSF_OPERATION" = template-only ]; then
-            "$KSF_RELEASE_NODE" .agents/core/runtime/src/distribution/release-actions.js recover
-          else
-            .agents/ksf release build --output "$KSF_RELEASE_DIRECTORY" --json
-            "$KSF_RELEASE_NODE" .agents/core/runtime/src/distribution/release-actions.js inspect
-          fi
-      - name: Obtain repository-scoped template preflight token
-        id: app
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ vars.KSF_TEMPLATE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.KSF_TEMPLATE_APP_PRIVATE_KEY }}
-          owner: yinbaiyuan
-          repositories: ksf-workspace
-          permission-contents: write
-          permission-workflows: write
-      - name: Check App target and generated-template provenance before publication
+          .agents/ksf release build --output "$KSF_RELEASE_DIRECTORY" --json
+          "$KSF_RELEASE_NODE" .agents/core/runtime/src/distribution/release-actions.js inspect
+      - name: Verify official Core template settings
         env:
-          KSF_RELEASE_DIRECTORY: ${{ runner.temp }}/ksf-release
-          KSF_GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          KSF_GITHUB_TOKEN: ${{ github.token }}
         run: '"$KSF_RELEASE_NODE" .agents/core/runtime/src/distribution/release-actions.js preflight'
       - uses: actions/upload-artifact@v7.0.2
         id: upload
@@ -147,14 +102,12 @@ jobs:
           name: ksf-core-release-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/ksf-release/*.tar.gz
-            ${{ runner.temp }}/ksf-release/ksf-core-release.json
+            ${{ runner.temp }}/ksf-release/*.json
           if-no-files-found: error
           retention-days: 14
   release:
     needs: prepare
-    if: >-
-      ${{ !cancelled() && needs.prepare.result == 'success' &&
-          inputs.operation != 'template-only' }}
+    if: ${{ !cancelled() && github.repository == 'yinbaiyuan/ksf-core' && needs.prepare.result == 'success' }}
     runs-on: macos-15
     timeout-minutes: 20
     permissions:
@@ -182,59 +135,9 @@ jobs:
           .agents/ksf runtime verify --json
           ksf_node=$(.agents/ksf hello --json | /usr/bin/plutil -extract runtime.nodePath raw -o - -)
           "$ksf_node" .agents/core/runtime/src/distribution/release-actions.js inspect
-          if ! .agents/ksf release publish "$KSF_RELEASE_DIRECTORY" --release-only --json > "$KSF_RELEASE_RESULT"; then
+          if ! .agents/ksf release publish "$KSF_RELEASE_DIRECTORY" --json > "$KSF_RELEASE_RESULT"; then
             cat "$KSF_RELEASE_RESULT"
             printf 'Core publication failed or is unknown. Reconcile this same version and artifact before retrying.\n' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          "$ksf_node" .agents/core/runtime/src/distribution/release-actions.js report
-  template:
-    needs: [prepare, release]
-    if: >-
-      ${{ !cancelled() && needs.prepare.result == 'success' &&
-          (needs.release.result == 'success' ||
-           (github.event_name == 'workflow_dispatch' && inputs.operation == 'template-only')) }}
-    runs-on: macos-15
-    timeout-minutes: 20
-    env:
-      KSF_EXPECTED_REVISION: ${{ needs.prepare.outputs.revision }}
-      KSF_EXPECTED_INDEX: ${{ needs.prepare.outputs.index }}
-      KSF_PUBLISHER_REVISION: ${{ needs.prepare.outputs.publisher }}
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          ref: ${{ needs.prepare.outputs.publisher }}
-          persist-credentials: false
-      - uses: actions/download-artifact@v8.0.2
-        with:
-          artifact-ids: ${{ needs.prepare.outputs.artifact }}
-          path: ${{ runner.temp }}/ksf-release
-          merge-multiple: true
-      - name: Obtain repository-scoped template publication token
-        id: app
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          client-id: ${{ vars.KSF_TEMPLATE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.KSF_TEMPLATE_APP_PRIVATE_KEY }}
-          owner: yinbaiyuan
-          repositories: ksf-workspace
-          permission-contents: write
-          permission-workflows: write
-      - name: Publish and reconcile the exact workspace template
-        env:
-          KSF_RELEASE_DIRECTORY: ${{ runner.temp }}/ksf-release
-          KSF_GITHUB_TOKEN: ${{ steps.app.outputs.token }}
-          KSF_RELEASE_PHASE: template
-          KSF_RELEASE_RESULT: ${{ runner.temp }}/template-result.json
-        run: |
-          printf 'Template publisher: `%s`\nRelease Core: `%s`\n\n' "$KSF_PUBLISHER_REVISION" "$KSF_EXPECTED_REVISION" >> "$GITHUB_STEP_SUMMARY"
-          .agents/ksf runtime verify --json
-          ksf_node=$(.agents/ksf hello --json | /usr/bin/plutil -extract runtime.nodePath raw -o - -)
-          "$ksf_node" .agents/core/runtime/src/distribution/release-actions.js inspect
-          "$ksf_node" .agents/core/runtime/src/distribution/release-actions.js preflight
-          if ! .agents/ksf release template "$KSF_RELEASE_DIRECTORY" --json > "$KSF_RELEASE_RESULT"; then
-            cat "$KSF_RELEASE_RESULT"
-            printf 'Template publication failed or is unknown. Recover this template stage using the same artifact or exact published tag; do not republish Core for this retry.\n' >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
           "$ksf_node" .agents/core/runtime/src/distribution/release-actions.js report

@@ -96,3 +96,5 @@ CLI 适配在 `runtime/src/commands/context.js`，组合服务在 `runtime/src/s
 ## 能力源过滤
 
 默认聚合个人、全部已关联源和系统的有效协同/搭档。--source <源ID> 则聚合个人、指定源和系统，保留个人优先与固定入口。每项新增 source，源对象还含 source_root 和实际绝对 path；description 仍原样提供。多源同 ID 歧义返回 SOURCE_AMBIGUOUS 和候选，按明确源重新发现，不按配置顺序猜测。详情见[能力源协议](../sources.md)。
+
+未初始化的 Core 模板或原始更新包优先返回 mode=instance-setup，固定定义引导显式 instance init。入口本身只读本地状态，不联网查版本；成功初始化后重新取入口，再进入 incubation/runtime。正式 Core 源仓库依据自身 Git 根与官方 origin 识别，不在官方源上创建个人资料。

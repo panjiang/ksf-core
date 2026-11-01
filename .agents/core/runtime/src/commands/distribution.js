@@ -7,9 +7,10 @@ import { readPRText } from '../services/pr-description.js';
 const specs = {
   release: {
     build: { options: ['output', 'platform', 'allow-dirty', 'dry-run'], usage: 'build [--output <directory>] [--platform <platform>] [--allow-dirty] [--dry-run]' },
-    publish: { target: true, options: ['dry-run', 'release-only'], usage: 'publish <release-directory> [--release-only] [--dry-run]' },
-    template: { target: true, options: ['dry-run'], usage: 'template <release-directory> [--dry-run]' },
-    mirror: { options: ['source', 'dry-run'], usage: 'mirror [--source <Release URL or index file>] [--dry-run]' },
+    publish: { target: true, options: ['dry-run'], usage: 'publish <release-directory> [--dry-run]' },
+  },
+  instance: {
+    init: { options: ['revision', 'dry-run'], usage: 'init [--revision <Core commit>] [--dry-run]' },
   },
   system: {
     read: { options: [], usage: 'read' },
@@ -25,13 +26,14 @@ const specs = {
     submit: { target: true, options: ['reviewed', 'dry-run'], usage: 'submit <contribution-id> --reviewed <preview-digest> [--dry-run]' },
   },
 };
-const booleans = new Set(['json', 'help', 'allow-dirty', 'dry-run', 'release-only', 'all', 'quiet', 'apply']);
+const booleans = new Set(['json', 'help', 'allow-dirty', 'dry-run', 'all', 'quiet', 'apply']);
 export function distributionHelp(command, operation) {
   const selected = operation ? [specs[command][operation]] : Object.values(specs[command]);
   const notes = {
-    release: 'Build the ksf-core system and ksf-workspace user template from Core sources.\nOutput contains ksf-workspace/, both product archives and the ksf-core release index.\nCopy the template to an instance named ksf or any user-chosen name.\nOfficial publishing rejects dirty/development packages.\nPublishing requires GitHub authorization; building and --dry-run do not.\n',
+    release: 'Build and publish one ksf-core product and its release index.\nA local ksf/ directory is an initialized instance for inspection; it is not a second release artifact.\nOfficial publishing rejects dirty/development packages and requires GitHub authorization.\n',
+    instance: 'Initialize a private instance created from the Core template.\nVerify its original tree against exact Core commits, seed missing user files, record the immutable baseline, and use main for personal work.\nNever replaces existing personal content or changes the Git remote.\n',
     system: 'Read, check, update and roll back copied or template-created workspaces.\nVersion checks and installation require an explicit command; startup never invokes sync.\nUpdates use explicit release baselines and never merge personal Git history.\n--source accepts HTTPS, absolute/local index files and loopback HTTP.\n--from selects a verified Core archive; original baselines are resolved online.\nUser directories and .gitignore are never update targets.\nConflicts preserve the current system. Use .agents/ksf for recovery.\n',
-    contribute: 'Select committed HEAD system changes against its original Core baseline.\nGit, a local HEAD and network access to the recorded Core are required; index and working changes are ignored.\nPersonal files, history and local commit IDs are never published.\n--paths takes root-relative literal system paths, not globs.\nPrepare requires a reviewed conventional title and 原因／变更／验证 body (--body or --body-file).\nA separate PR description is required (--pr-body or --pr-body-file), with four Markdown sections.\nSchema-4 plans freeze the full commit message and PR body including provenance.\nSchema-1/2/3 plans remain readable and can only reconcile existing publication records.\nRetries never overwrite remote PR descriptions.\nPrepare warns about prior PRs for the same local commit or system content.\nIdentical content reuses its verified PR; unknown prior attempts must be reconciled.\nSubmission creates a draft Core PR; it requires GitHub authorization.\n',
+    contribute: 'Select committed HEAD system changes against its original Core baseline.\nGit, a local HEAD and network access to the recorded Core are required; index and working changes are ignored.\nPersonal files, history and local commit IDs are never published.\n--paths takes root-relative literal system paths, not globs.\nPrepare requires a reviewed conventional title and 原因／变更／验证 body (--body or --body-file).\nA separate PR description is required (--pr-body or --pr-body-file), with four Markdown sections.\nSchema-5 plans freeze the full commit message, PR body, provenance and upstream core-main target.\nSchema-1/2/3/4 plans remain readable and can only reconcile existing publication records.\nRetries never overwrite remote PR descriptions.\nPrepare warns about prior PRs for the same local commit or system content.\nIdentical content reuses its verified PR; unknown prior attempts must be reconciled.\nSubmission creates a draft Core PR; it requires GitHub authorization.\n',
   };
   return `KSF ${command}${operation ? ` ${operation}` : ''}\n\nUsage:\n` + selected.map(s => `  ksf ${command} ${s.usage} [--json]`).join('\n') + '\n\n' + notes[command] +
     'Paths are relative to the KSF root; -- ends option parsing.\n--dry-run previews without publishing or changing live system files.\nUse --help or -h alone at command or operation level.\n';
@@ -92,13 +94,15 @@ export async function runDistributionCommand(command, args, root) {
       if (parsed.bodyFile !== undefined) parsed.body = readCommitText(root, parsed.bodyFile);
       if (parsed.prBodyFile !== undefined) parsed.prBody = readPRText(root, parsed.prBodyFile);
       data = await methods[parsed.operation]({ root, ...parsed, id: parsed.target });
+    } else if (command === 'instance') {
+      const { initializeInstance } = await import('../distribution/instance.js');
+      data = await initializeInstance({ root, ...parsed });
     } else if (parsed.operation === 'build') {
       const { buildRelease } = await import('../distribution/release.js');
       data = await buildRelease({ root, ...parsed });
     } else {
-      const { publishRelease, publishTemplate, mirrorTemplate } = await import('../distribution/publish.js');
-      data = parsed.operation === 'mirror' ? await mirrorTemplate({ root, ...parsed }) :
-        await (parsed.operation === 'publish' ? publishRelease : publishTemplate)({ root, directory: resolve(root, parsed.target), dryRun: parsed.dryRun, releaseOnly: parsed.releaseOnly });
+      const { publishRelease } = await import('../distribution/publish.js');
+      data = await publishRelease({ root, directory: resolve(root, parsed.target), dryRun: parsed.dryRun });
     }
     response.ok = true; response.data = publicData(data);
   } catch (error) {

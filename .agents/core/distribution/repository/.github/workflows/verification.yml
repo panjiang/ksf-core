@@ -1,0 +1,173 @@
+name: Native test verification
+on:
+  workflow_call:
+    inputs:
+      full:
+        type: boolean
+        required: true
+permissions:
+  contents: read
+jobs:
+  platform:
+    if: github.repository == 'yinbaiyuan/ksf-core'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      KSF_SKIP_AUTO_UPDATE: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+      - name: Prepare and verify pinned runtime on macOS
+        if: runner.os == 'macOS'
+        run: |
+          .agents/ksf build --json > /dev/null
+          .agents/ksf runtime verify --json
+          ksf_node=$(.agents/ksf hello --json | /usr/bin/plutil -extract runtime.nodePath raw -o - -)
+          dirname "$ksf_node" >> "$GITHUB_PATH"
+      - name: Prepare and verify pinned runtime on Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          & ./.agents/ksf.ps1 build --json | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./.agents/ksf.ps1 runtime verify --json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $details = & ./.agents/ksf.ps1 hello --json | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Split-Path $details.runtime.nodePath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Install SDK test dependencies
+        working-directory: .agents/core/applications/sdk
+        run: npm ci --ignore-scripts
+      - name: Install frontend dependencies
+        working-directory: .agents/core/runtime/web
+        run: npm ci
+      - name: Install Projects test dependencies
+        working-directory: .agents/core/applications/projects
+        run: npm ci --ignore-scripts
+      - name: Build frontend before server tests
+        working-directory: .agents/core/runtime/web
+        run: npm run build
+      - name: Quick verification
+        if: '!inputs.full'
+        run: |
+          node .agents/core/runtime/src/cli.js test --suite quick --json > result.json
+          node .agents/core/runtime/src/testing/ci.js stamp result.json ${{ runner.os }}.report.json
+      - name: Freeze prepared toolchains for full shards
+        if: inputs.full
+        run: tar -cf prepared.tar .agents/core/applications/sdk/node_modules .agents/core/applications/projects/node_modules .agents/core/runtime/web/node_modules .agents/core/runtime/web/dist
+      - uses: actions/upload-artifact@v7.0.2
+        if: inputs.full
+        with:
+          overwrite: true
+          name: prepared-${{ runner.os }}
+          path: prepared.tar
+          retention-days: 1
+      - uses: actions/upload-artifact@v7.0.2
+        if: '!inputs.full'
+        with:
+          overwrite: true
+          name: quick-${{ runner.os }}
+          path: '*.report.json'
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7.0.2
+        if: failure()
+        with:
+          overwrite: true
+          name: failure-platform-${{ runner.os }}
+          path: .agents/runtime-data/tests/
+  full:
+    if: inputs.full && github.repository == 'yinbaiyuan/ksf-core'
+    needs: platform
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: macos-15, platform: macOS, shard: 1/2, id: mac-1}
+          - {os: macos-15, platform: macOS, shard: 2/2, id: mac-2}
+          - {os: windows-2025, platform: Windows, shard: 1/4, id: win-1}
+          - {os: windows-2025, platform: Windows, shard: 2/4, id: win-2}
+          - {os: windows-2025, platform: Windows, shard: 3/4, id: win-3}
+          - {os: windows-2025, platform: Windows, shard: 4/4, id: win-4}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: prepared-${{ matrix.platform }}
+      - name: Restore platform toolchains
+        run: tar -xf prepared.tar
+      - name: Prepare shard runtime on macOS
+        if: runner.os == 'macOS'
+        run: |
+          .agents/ksf build --json > /dev/null
+          ksf_node=$(.agents/ksf hello --json | /usr/bin/plutil -extract runtime.nodePath raw -o - -)
+          dirname "$ksf_node" >> "$GITHUB_PATH"
+      - name: Prepare shard runtime on Windows
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          & ./.agents/ksf.ps1 build --json | Out-Null
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $details = & ./.agents/ksf.ps1 hello --json | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Split-Path $details.runtime.nodePath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Restore declared local SDK links
+        run: node .agents/core/runtime/src/testing/ci.js restore-links
+      - name: Full deterministic shard
+        run: |
+          node .agents/core/runtime/src/cli.js test --suite full --shard ${{ matrix.shard }} --json > result.json
+          node .agents/core/runtime/src/testing/ci.js stamp result.json ${{ matrix.id }}.report.json
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          overwrite: true
+          name: full-${{ matrix.id }}
+          path: '*.report.json'
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7.0.2
+        if: failure()
+        with:
+          overwrite: true
+          name: failure-${{ matrix.id }}
+          path: .agents/runtime-data/tests/
+  coverage:
+    if: always() && github.repository == 'yinbaiyuan/ksf-core'
+    needs: [platform, full]
+    runs-on: macos-15
+    steps:
+      - name: Require every applicable job
+        env:
+          PLATFORM_RESULT: ${{ needs.platform.result }}
+          FULL_RESULT: ${{ needs.full.result }}
+          FULL: ${{ inputs.full }}
+        run: test "$PLATFORM_RESULT" = success && { test "$FULL" != true || test "$FULL_RESULT" = success; }
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: ${{ inputs.full && 'full-*' || 'quick-*' }}
+          path: reports
+      - name: Verify exact platform coverage
+        run: |
+          .agents/ksf build --json > /dev/null
+          ksf_node=$(.agents/ksf hello --json | /usr/bin/plutil -extract runtime.nodePath raw -o - -)
+          "$ksf_node" .agents/core/runtime/src/testing/ci.js aggregate reports ${{ inputs.full && 'full' || 'quick' }} proof.json
+      - uses: actions/upload-artifact@v7.0.2
+        if: inputs.full
+        with:
+          overwrite: true
+          name: suite-proof-${{ github.sha }}
+          path: proof.json
+          if-no-files-found: error

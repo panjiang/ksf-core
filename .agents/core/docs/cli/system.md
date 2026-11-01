@@ -13,7 +13,7 @@
 
 各操作支持 json、单独 help。quiet 仅限 sync，与 json 互斥。source 与 from 互斥，不持久改变来源；文件按 KSF 根定位。接受 HTTPS、本地文件和 loopback HTTP；拒绝公开明文 HTTP、带凭据地址和降级重定向。
 
-read/check 不写业务目标。schema 4 实例的 read 会联网读取固定 Core 提交的文件树以比较差异，不查询新版；升级双方修改同一文本时按需读取并校验原文。联网是维护前提，读取失败保留当前系统。未发布的 development 小型凭据只返回身份，changes:null、baselineVerified:false、baselineStatus:development-package，不尝试把个人或未发布提交冒充远程原版；开发包仍不能贡献或正式升级。update 预览也下载、合并、验证候选，但不切换系统或建立正式备份。update 要求新版本；旧版本使用 rollback。开发仓库 read 返回 development，其余安装操作要求有效 release.json。
+read/check 不写业务目标。schema 4/5 实例的 read 会联网读取固定 Core 提交的文件树以比较差异，不查询新版；升级双方修改同一文本时按需读取并校验原文。联网是维护前提，读取失败保留当前系统。未发布的 development 小型凭据只返回身份，changes:null、baselineVerified:false、baselineStatus:development-package，不尝试把个人或未发布提交冒充远程原版；开发包仍不能贡献或正式升级。update 预览也下载、合并、验证候选，但不切换系统或建立正式备份。update 通常要求新版本；源码模板 schema 5 可将同版本且验证为原 Core 提交后继的正式发行安装为 schema 4，同版本 Release 落后于已验证模板来源时 check 返回 sourceAhead:true、available:false，保留当前源码；显式安装旧包仍拒绝。旧正式凭据仍拒绝同版本换源。旧版本使用 rollback。开发仓库 read 返回 development，其余安装操作要求有效 release.json。
 
 ## 在用户实例里手动升级
 
@@ -54,3 +54,5 @@ JSON：`{ok, command:"system", operation, data, errors}`，成功 0、操作失�
 `ksf system cleanup --json` 返回候选、保留项、警告及可释放容量，不修改目标；`--apply` 与 `--dry-run` 互斥。应用清理前再次核对回执、文件和源码保护依据，错误保留现场。唯一文件或独立 Git 历史尚未保全时，`warnings` 中返回 `source-not-preserved`，该材料不会进入候选。
 
 本命令只管理已识别的切换／正式备份及统一测试材料，保留最近可用回退。范围、源码归属与任务结束处理见[运行数据与源码保留](../runtime/runtime-data.md)。业务状态及未知历史目录需另外核对，不根据日期批量删除。
+
+check 另返回 installedPlatform、platform 与 platformSwitch。旧模板或跨设备复制保留了其他平台的发行凭据时，新索引按本机平台选包；同版本且完整 Core SHA 相同，允许显式 update 完成平台标记校正，保留原始来源与个人数据。旧客户端由兼容索引先升级程序，再重新检查并完成本机平台校正。

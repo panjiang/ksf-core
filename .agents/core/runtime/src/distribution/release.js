@@ -11,7 +11,7 @@ import { validateManifest, releaseReceipt } from './manifests.js';
 import { versionParts } from './versions.js';
 import { createArchive, readArchive } from './archive.js';
 import { types } from '../objects/schema.js';
-import { products, artifactName, releaseIndexName, launcherFiles, launcherProtocol } from './products.js';
+import { products, artifactName, releaseIndexName, legacyReleaseIndexName, compatibilityIndex, launcherFiles, launcherProtocol } from './products.js';
 import { userDataRoot } from '../user-data/schema.js';
 import { committedSource } from './committed-source.js';
 import { gitBlobID, baselinePath } from './baseline.js';
@@ -19,7 +19,7 @@ import { developmentPath } from './paths.js';
 import { gitExecutable } from '../platform/index.js';
 
 export const userDirectories = ['项目', '知识', ...Object.values(types).map(type => type.user), '@收件箱', '档案', '档案/个人', '档案/企业', '档案/项目', userDataRoot];
-// Explicit template allowlist: never discover instance content to build a workspace.
+// Explicit instance seed allowlist: never discover or package personal content.
 export const knowledgeFrameworkFiles = [
   '知识/rules/README.md', '知识/rules/认知.md',
   '知识/rules/templates/cognition/cognition.md',
@@ -58,14 +58,20 @@ export function inspectCoreArchive(bytes, { expectedVersion, expectedPlatform, e
   }
   return { entries, manifest };
 }
-export async function buildRelease({ root, output, platform = `${process.platform}-${process.arch}`, allowDirty = false, dryRun = false }) {
+async function buildPlatformRelease({ root, output, platform, allowDirty = false, dryRun = false }) {
   const config = configuration(root), build = parseJSON(readRegular(root, '.agents/core/build.json'), 'build.json');
   versionParts(build.version);
   if (!build.runtime?.packages?.[platform]) fail('PLATFORM_UNSUPPORTED', `No bundled runtime for ${platform}.`);
+  if (!allowDirty) {
+    const branch = spawnSync(gitExecutable, ['-C', root, 'branch', '--show-current'], { encoding: 'utf8' });
+    const stable = branch.stdout?.trim() === config.core_branch || ['', null].includes(branch.stdout?.trim()) &&
+      ['refs/heads/', 'refs/remotes/origin/'].some(prefix => spawnSync(gitExecutable, ['-C', root, 'merge-base', '--is-ancestor', 'HEAD', prefix + config.core_branch]).status === 0);
+    if (branch.status !== 0 || !stable) fail('RELEASE_BRANCH_INVALID', 'Official builds require the stable Core branch or its verified detached commit.');
+  }
   const source = revisionInfo(root, allowDirty), paths = [...walkFiles(root, '.agents/core', { exclude: excluded }), ...launcherFiles].sort();
   const committed = source.dirty ? null : committedSource(root);
   const destination = resolve(root, output ?? `.agents/runtime-data/releases/${build.version}-${platform}`);
-  const targetRoot = join(destination, products.workspace);
+  const targetRoot = join(destination, products.instance);
   if (existsSync(destination)) fail('OUTPUT_EXISTS', 'Release output already exists; choose a new output directory.');
   const staging = mkdtempSync(join(tmpdir(), 'ksf-release-'));
   try {
@@ -95,38 +101,67 @@ export async function buildRelease({ root, output, platform = `${process.platfor
     }
     const manifest = validateManifest({ schema_version: 3, launcher_protocol: launcherProtocol, name: products.core, product: products.core, version: build.version, platform,
       core: { repository: config.core_repository, branch: config.core_branch, revision: source.revision },
-      development: source.dirty, files: inventory });
+      development: source.dirty, instance_initialization: 1, files: inventory });
     coreEntries.push({ path: '.agents/core/release.json', bytes: Buffer.from(stableJSON(manifest)), mode: 0o644 });
     const coreArchive = createArchive(coreEntries);
     inspectCoreArchive(coreArchive, { expectedVersion: build.version, expectedPlatform: platform, expectedRepository: config.core_repository });
     const extras = [];
     for (const file of ['README.md', '.gitignore', '.gitattributes', ...workspaceDocuments]) extras.push({ path: file, bytes: readRegular(root, `.agents/core/distribution/template/${file}`), mode: 0o644 });
     for (const directory of userDirectories) extras.push({ path: `${directory}/.gitkeep`, bytes: Buffer.alloc(0), mode: 0o644 });
-    extras.push({ path: '.ksf-template.json', mode: 0o644, bytes: Buffer.from(stableJSON({ schema_version: 1,
-      product: products.workspace, instance_default_name: products.instance,
-      generated_from: config.core_repository, revision: source.revision, version: build.version })) });
     const receipt = Buffer.from(stableJSON(releaseReceipt(manifest)));
     const fullEntries = [...coreEntries.map(entry => entry.path === '.agents/core/release.json' ? { ...entry, bytes: receipt } : entry), ...extras];
-    const workspaceArchive = createArchive(fullEntries);
-    const coreName = artifactName('core', build.version, platform), workspaceName = artifactName('workspace', build.version, platform);
+    const coreName = artifactName('core', build.version, platform);
     const base = `https://github.com/${config.core_repository}/releases/download/v${build.version}/`;
     const artifact = (name, bytes) => ({ name, url: base + name, sha256: sha256(bytes), size: bytes.length });
-    const index = { schema_version: 1, products, version: build.version, core_repository: config.core_repository,
+    const index = { schema_version: 2, products, version: build.version, core_repository: config.core_repository,
       core_revision: source.revision, development: source.dirty, platforms: { [platform]: {
-        core: artifact(coreName, coreArchive), workspace: artifact(workspaceName, workspaceArchive),
+        core: artifact(coreName, coreArchive),
       } } };
     const current = revisionInfo(root, true);
     if (current.revision !== source.revision || [...sourceHashes].some(([p, hash]) => sha256(readRegular(root, p)) !== hash) ||
         paths.join('\n') !== [...walkFiles(root, '.agents/core', { exclude: excluded }), ...launcherFiles].sort().join('\n')) fail('RELEASE_INPUT_CHANGED', 'Core changed while building the release.');
     const result = { version: build.version, platform, development: source.dirty, coreRevision: source.revision,
-      products, output: destination, template: targetRoot, index, managedFiles: Object.keys(inventory).length, dryRun };
+      products, output: destination, instance: targetRoot, template: targetRoot, index, sourceDigest: sha256(stableJSON(inventory)), managedFiles: Object.keys(inventory).length, dryRun };
     if (!dryRun) {
       mkdirSync(destination, { recursive: true });
       for (const entry of fullEntries) writeAtomic(checkedPath(targetRoot, entry.path), entry.bytes, entry.mode);
       writeAtomic(join(destination, coreName), coreArchive);
-      writeAtomic(join(destination, workspaceName), workspaceArchive);
       writeAtomic(join(destination, releaseIndexName), stableJSON(index));
+      writeAtomic(join(destination, legacyReleaseIndexName), stableJSON(compatibilityIndex(index)));
     }
     return result;
+  } finally { rmSync(staging, { recursive: true, force: true }); }
+}
+
+// The official feed must contain every declared platform. A Mac publisher can
+// build a Windows archive without executing the Windows runtime.
+export async function buildRelease(options) {
+  const { root, output, platform, dryRun = false } = options;
+  const build = parseJSON(readRegular(root, '.agents/core/build.json'), 'build.json');
+  const targets = platform ? [platform] : Object.keys(build.runtime?.packages ?? {}).sort();
+  if (!targets.length) fail('PLATFORM_UNSUPPORTED', 'No bundled release platforms are declared.');
+  if (targets.length === 1) return buildPlatformRelease({ ...options, platform: targets[0] });
+  const destination = resolve(root, output ?? `.agents/runtime-data/releases/${build.version}`);
+  if (existsSync(destination)) fail('OUTPUT_EXISTS', 'Release output already exists; choose a new output directory.');
+  const staging = mkdtempSync(join(tmpdir(), 'ksf-platform-releases-'));
+  try {
+    const results = [];
+    for (const target of targets) results.push(await buildPlatformRelease({ ...options, platform: target, output: join(staging, target) }));
+    const first = results[0];
+    if (results.some(result => result.version !== first.version || result.coreRevision !== first.coreRevision || result.sourceDigest !== first.sourceDigest || result.development !== first.development)) fail('RELEASE_INPUT_CHANGED', 'All platform packages must come from the same frozen system source.');
+    const index = { ...first.index, platforms: Object.assign({}, ...results.map(result => result.index.platforms)) };
+    const native = results.find(result => result.platform === `${process.platform}-${process.arch}`) ?? first;
+    const instance = join(destination, products.instance);
+    if (!dryRun) {
+      mkdirSync(destination, { recursive: true });
+      for (const result of results) {
+        const item = result.index.platforms[result.platform].core;
+        renameSync(join(result.output, item.name), join(destination, item.name));
+      }
+      renameSync(native.instance, instance);
+      writeAtomic(join(destination, releaseIndexName), stableJSON(index));
+      writeAtomic(join(destination, legacyReleaseIndexName), stableJSON(compatibilityIndex(index)));
+    }
+    return { ...first, platform: null, platforms: targets, output: destination, instance, template: instance, index, dryRun };
   } finally { rmSync(staging, { recursive: true, force: true }); }
 }

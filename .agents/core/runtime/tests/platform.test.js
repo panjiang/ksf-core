@@ -10,6 +10,8 @@ import {mergeText} from '../src/shared/merge-text.js';
 import {createArchive,readArchive} from '../src/distribution/archive.js';
 import {supportedCodexVersion} from '../src/ai-tasks/executors/codex-compatibility.js';
 import {terminalText} from './helpers/platform.js';
+import {launchAgentBelongsToRoot,windowsLoginStartupJob} from '../src/platform/service.js';
+import {powershell,encodedCommand} from '../src/platform/windows.js';
 
 test('both adapters implement the same native-operation contract',()=>{
   for(const name of ['darwin','win32']){
@@ -32,6 +34,9 @@ test('CLI compatibility includes only explicitly validated platform/version comb
   assert.equal(supportedCodexVersion('codex-cli 0.165.0-alpha.1.2','win32'),true);
   assert.equal(supportedCodexVersion('codex-cli 0.165.0-alpha.1.2','darwin'),false);
   assert.equal(supportedCodexVersion('codex-cli 0.165.0-alpha.1.3','win32'),false);
+  assert.equal(supportedCodexVersion('codex-cli 0.166.0-alpha.5.1','win32'),true);
+  assert.equal(supportedCodexVersion('codex-cli 0.166.0-alpha.5.1','darwin'),false);
+  assert.equal(supportedCodexVersion('codex-cli 0.166.0-alpha.5.2','win32'),false);
   assert.equal(supportedCodexVersion('codex-cli 0.130.0','win32'),false);
 });
 test('case-insensitive Windows environment selection retains Path and SystemRoot',()=>{
@@ -90,3 +95,33 @@ test('UTF-8 PAX archives round-trip through the shared reader and the native ext
 });
 
 test('native filename validation distinguishes ordinary spaces from Windows reserved names',()=>{const win=platformServices('win32');assert.equal(win.validSegment('中文 space'),true);for(const name of ['CON','aux.txt','末尾 ','末尾.','name:stream'])assert.equal(win.validSegment(name),false,name);assert.equal(platformServices('darwin').validSegment('末尾 '),true);});
+
+
+test('login startup ownership distinguishes another instance and rejects ambiguous launch agents',()=>{
+  const own='/Users/test/中文 & core',document='<plist><key>WorkingDirectory</key><string>/Users/test/中文 &amp; core</string></plist>';
+  assert.equal(launchAgentBelongsToRoot(document,own),true);
+  assert.equal(launchAgentBelongsToRoot(document,'/Users/test/other'),false);
+  assert.throws(()=>launchAgentBelongsToRoot('<plist/>',own),{code:'SERVICE_OS_FAILED'});
+  assert.throws(()=>launchAgentBelongsToRoot(document+document,own),{code:'SERVICE_OS_FAILED'});
+});
+
+test('native Windows startup disable preserves another instance and unknown task ownership',{skip:process.platform!=='win32'},()=>{
+  const root="E:\\验收 工作区\\quote'core";
+  for(const [kind,enabled,expected,failed] of [['other',false,0,false],['missing',false,0,false],['own',false,1,false],['unknown',false,0,true],['denied',false,0,true],['other',true,1,false]]){
+    const workdir=kind==='own'?root.toLowerCase()+'\\':'E:\\daily-instance';
+    const fixture=kind==='missing'||kind==='denied'
+      ?`throw [System.Management.Automation.ErrorRecord]::new([Exception]::new('lookup'), 'lookup', [System.Management.Automation.ErrorCategory]::${kind==='missing'?'ObjectNotFound':'PermissionDenied'}, $null)`
+      :`return [pscustomobject]@{Actions=@([pscustomobject]@{WorkingDirectory=${kind==='unknown'?"''":"'"+workdir.replaceAll("'","''")+"'"}})}`;
+    const script=`$ErrorActionPreference='Stop'; $script:registered=0;
+function Get-ScheduledTask { param($TaskName,$TaskPath,$ErrorAction); ${fixture} }
+function New-ScheduledTaskAction { [pscustomobject]@{} }
+function New-ScheduledTaskPrincipal { [pscustomobject]@{} }
+function New-ScheduledTaskSettingsSet { [pscustomobject]@{} }
+function New-ScheduledTaskTrigger { [pscustomobject]@{} }
+function New-ScheduledTask { [pscustomobject]@{} }
+function Register-ScheduledTask { $script:registered++ }
+$failed=$false; try { & { ${windowsLoginStartupJob(root,enabled)} } } catch { $failed=$true }; [pscustomobject]@{registered=$script:registered;failed=$failed} | ConvertTo-Json -Compress`;
+    const child=spawnSync(powershell(),encodedCommand(script),{encoding:'utf8',timeout:15000,windowsHide:true});
+    assert.equal(child.status,0,child.stderr);assert.deepEqual(JSON.parse(child.stdout),{registered:expected,failed},kind);
+  }
+});

@@ -4,7 +4,7 @@
   "id": "com.ksf.cooperation-center",
   "name": "KSF合作",
   "description": "声明可承接事项，以 KSF 实例为单位发起、处理和交付合作任务，管理历史与消息。",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "author": "KSF",
   "icon": "handshake",
   "window": {

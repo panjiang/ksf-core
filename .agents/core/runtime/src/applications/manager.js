@@ -96,7 +96,11 @@ export function createApplicationManager(root, { storeDirectory = bundledStore, 
   async function mutate(action) {
     return withStateLock(async () => {
       const temporary = `${statePath}.${randomUUID()}.tmp`;
-      try { const state = await readState(), result = await action(state); state.revision++; await writeFile(temporary, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 }); await replaceFile(temporary, statePath); reconcileBackground(); return result; }
+      try {
+        const state = await readState(), before = JSON.stringify(state), result = await action(state);
+        if (JSON.stringify(state) === before) return result;
+        state.revision++; await writeFile(temporary, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 }); await replaceFile(temporary, statePath); reconcileBackground(); return result;
+      }
       finally { await rm(temporary, { force: true }); }
     });
   }

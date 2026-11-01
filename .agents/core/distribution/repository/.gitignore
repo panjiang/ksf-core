@@ -1,0 +1,16 @@
+# Official Core source only. Personal data never enters this repository.
+/*
+!/.agents/
+!/.github/
+!/AGENTS.md
+!/README.md
+!/.gitignore
+!/.gitattributes
+/.agents/*
+!/.agents/core/
+!/.agents/ksf
+!/.agents/ksf.ps1
+/.agents/core/release.json
+**/node_modules/
+**/.build/
+**/.DS_Store

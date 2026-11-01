@@ -6,18 +6,52 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createCoordinator } from '../src/services/workbench-common.js';
 import { createWorkspaceFiles } from '../src/services/workspace-files.js';
-import { createWorkbenchGit, runGit } from '../src/services/workbench-git.js';
-async function fixture(t) {
- const root=await realpath(await mkdtemp(join(tmpdir(),'ksf-git-detail-'))); t.after(()=>rm(root,{recursive:true,force:true}));
+import { createWorkbenchGit, createPersistedWorkbenchGit, runGit } from '../src/services/workbench-git.js';
+import { createApplicationStorage } from '../src/services/application-storage.js';
+async function fixture(t,options={}) {
+ const root=await realpath(await mkdtemp(join(tmpdir(),'ksf-git-detail-'))); t.after(async()=>{await git.close();await rm(root,{recursive:true,force:true});});
  const path=join(root,'repositories/demo'); await mkdir(path,{recursive:true}); const run=args=>runGit(path,args);
  await run(['init','-b','main']);await run(['config','core.autocrlf','false']);await run(['config','user.name','测试作者']);await run(['config','user.email','test@example.invalid']);await run(['config','commit.gpgsign','false']);
- const coordinator=createCoordinator(),git=createWorkbenchGit(root,createWorkspaceFiles(root,coordinator),coordinator);
+ const coordinator=createCoordinator(),git=createWorkbenchGit(root,createWorkspaceFiles(root,coordinator),coordinator,options);
  const save=async(name,text)=>writeFile(join(path,name),text), commit=async(message)=>{await run(['add','--','.']);await run(['commit','-m',message]);return (await run(['rev-parse','HEAD'])).stdout.trim();};
  await save('说明.md','first\n');const first=await commit('initial [literal]');await git.scan();const repo=(await git.list()).repositories.find(r=>r.path==='repositories/demo');
  const op=async(action,input={})=>{const state=await git.status(repo.id),item=await git.start({repo:repo.id,action,version:state.version,requestId:crypto.randomUUID(),...input});while(['queued','running'].includes(item.status))await new Promise(r=>setTimeout(r,5));return item;};
  const must=async(action,input)=>{const item=await op(action,input);assert.equal(item.status,'completed',JSON.stringify(item.error));return item;};
  return {root,path,run,save,commit,first,git,repo,op,must};
 }
+test('closing Git waits for the final operation receipt after its status becomes completed',async t=>{
+ let release,arrived;
+ const gate=new Promise(r=>{release=r;}),writing=new Promise(r=>{arrived=r;});
+ t.after(()=>release());
+ const f=await fixture(t,{persist:async ledger=>{if(ledger.some(item=>item.operation.status==='completed')){arrived();await gate;}}}),{git,repo}=f;
+ await f.save('说明.md','changed\n');const state=await git.status(repo.id);
+ const operation=await git.start({repo:repo.id,action:'stage',version:state.version,requestId:crypto.randomUUID(),paths:['说明.md']});
+ await writing;assert.equal(operation.status,'completed');
+ let closed=false;const closing=git.close().then(()=>{closed=true;});
+ await new Promise(r=>setTimeout(r,30));assert.equal(closed,false);
+ release();await closing;assert.equal(closed,true);
+});
+test('instance Git operations preserve legacy receipts without invalidating their own repository version',async t=>{
+ const root=await realpath(await mkdtemp(join(tmpdir(),'ksf-git-ledger-')));t.after(()=>rm(root,{recursive:true,force:true}));
+ const run=args=>runGit(root,args),caller={appId:'com.ksf.git'},storage=createApplicationStorage(root);
+ await run(['init','-b','main']);await run(['config','user.name','测试作者']);await run(['config','user.email','test@example.invalid']);await run(['config','commit.gpgsign','false']);
+ await writeFile(join(root,'.gitignore'),'.agents/runtime-data/\n');await writeFile(join(root,'中文 空格.md'),'before\n');await run(['add','--','.gitignore','中文 空格.md']);await run(['commit','-m','initial']);
+ const legacy=JSON.stringify([{requestId:'old',fingerprint:'old',operation:{id:'old-operation',status:'queued'}}]);await storage.write(caller,'operations.json',legacy);
+ const coordinator=createCoordinator(),files=createWorkspaceFiles(root,coordinator),git=await createPersistedWorkbenchGit(root,files,coordinator,storage);
+ await git.scan();const repo=(await git.list()).repositories.find(r=>r.path==='.');await writeFile(join(root,'中文 空格.md'),'after\n');
+ const state=await git.status(repo.id),request={repo:repo.id,action:'stage',version:state.version,requestId:crypto.randomUUID(),paths:['中文 空格.md']};
+ const operation=await git.start(request),deadline=Date.now()+20000;while(['queued','running'].includes(operation.status)&&Date.now()<deadline)await new Promise(r=>setTimeout(r,10));
+ assert.equal(operation.status,'completed',JSON.stringify(operation.error));assert.match((await run(['diff','--cached','--','中文 空格.md'])).stdout,/\+after/);
+ assert.equal((await storage.read(caller,'operations.json')).text,legacy);const runtime=await storage.read(caller,'operations.json',{scope:'runtime'});assert(runtime.exists);assert.equal(JSON.parse(runtime.text).find(r=>r.requestId==='old').operation.status,'failed');
+ await git.close();const restarted=await createPersistedWorkbenchGit(root,files,coordinator,storage);await restarted.scan();assert.equal((await restarted.start(request)).id,operation.id);await restarted.close();
+});
+test('a corrupt runtime Git ledger is preserved and never replaced by legacy receipts',async t=>{
+ const root=await realpath(await mkdtemp(join(tmpdir(),'ksf-git-ledger-invalid-')));t.after(()=>rm(root,{recursive:true,force:true}));
+ const storage=createApplicationStorage(root),caller={appId:'com.ksf.git'},coordinator=createCoordinator(),files=createWorkspaceFiles(root,coordinator);
+ await storage.write(caller,'operations.json','[]');await storage.write(caller,'operations.json','broken',{scope:'runtime'});
+ await assert.rejects(createPersistedWorkbenchGit(root,files,coordinator,storage),{code:'APP_DATA_INVALID'});
+ assert.equal((await storage.read(caller,'operations.json',{scope:'runtime'})).text,'broken');assert.equal((await storage.read(caller,'operations.json')).text,'[]');
+});
 test('history filters the entire history, follows renames, includes detached HEAD and paginates exactly',async t=>{
  const f=await fixture(t);for(let i=0;i<99;i++)await f.run(['commit','--allow-empty','-m',`entry ${i}`]);
  let page=await f.git.history(f.repo.id);assert.equal(page.commits.length,100);assert.equal(page.nextOffset,null);

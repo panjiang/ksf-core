@@ -1,3 +1,4 @@
+import {needsInstanceInitialization} from '../distribution/instance.js';
 import {readUserData} from './user-data.js';
 import {readConfigFile} from '../configuration/storage.js';
 import {parseFrontmatter} from '../metadata/frontmatter.js';
@@ -9,8 +10,8 @@ export function incubationState(root) {
   return state;
 }
 export function contextEntry(root) {
-  const state = incubationState(root), mode = state.values.status === 'pending' ? 'incubation' : 'runtime';
-  const path = mode === 'incubation' ? '.agents/core/docs/runtime/incubation.md' : '.agents/core/abilities/partners/ksf-runtime/partner.md';
+  const state = incubationState(root), mode = needsInstanceInitialization(root) ? 'instance-setup' : state.values.status === 'pending' ? 'incubation' : 'runtime';
+  const path = mode === 'instance-setup' ? '.agents/core/docs/runtime/instance-setup.md' : mode === 'incubation' ? '.agents/core/docs/runtime/incubation.md' : '.agents/core/abilities/partners/ksf-runtime/partner.md';
   const source = readConfigFile(root,path,{text:true});
   if (source.state === 'missing') throw incubationError('ENTRY_DEFINITION_MISSING',`入口定义不可读：${path}。请核对当前实例的完整 Core。`);
   const parsed = parseFrontmatter(Buffer.from(source.document),path);

@@ -1,11 +1,12 @@
 import {portable} from '../shared/paths.js';
 import {
   constants, lstatSync, readdirSync, openSync, closeSync, fstatSync, readSync, writeSync,
-  fsyncSync, fchmodSync, mkdirSync, linkSync, renameSync, unlinkSync, readFileSync,
+  fsyncSync, fchmodSync, mkdirSync, linkSync, unlinkSync, readFileSync,
 } from 'node:fs';
 import { resolve, join, dirname, basename, relative as nativeRelative, isAbsolute, parse } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { sameIdentity, withExclusiveLock, withTemporaryFile } from '../shared/files.js';
+import { replaceFileSync } from '../platform/index.js';
 
 const relative=(...args)=>portable(nativeRelative(...args));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -262,7 +263,7 @@ export function applyMaterials({ root, project, plan }, hooks = {}) {
       ctx.guard(); parentGuard();
       if (receiptInfo(ctx, info, plan.destination).etag !== expectedEtag) fail('INTAKE_RECORD_CHANGED', 'Import record changed before publication.');
       if (expectedEtag === 'missing') linkSync(temporary, receipt.path);
-      else renameSync(temporary, receipt.path);
+      else replaceFileSync(temporary, receipt.path);
     });
     expectedEtag = digest(bytes); changed = true;
   };

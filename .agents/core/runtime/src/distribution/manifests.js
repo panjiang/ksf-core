@@ -1,4 +1,4 @@
-import { products, launcherFiles, launcherProtocol } from './products.js';
+import { products, legacyProducts, launcherFiles, launcherProtocol } from './products.js';
 import { fail } from './errors.js';
 import { sha256, isSHA } from '../shared/hash.js';
 import { isRevision, isRepository, isBranch } from './git-values.js';
@@ -7,11 +7,12 @@ import { textBytes, readJSON } from './files.js';
 import { versionParts } from './versions.js';
 import { supportedTargets } from '../platform/catalog.js';
 
-export function validateProducts(value) {
+export function validateProducts(value, { legacy = false } = {}) {
+  const expected = legacy ? legacyProducts : products;
   if (!value || Array.isArray(value) ||
-      Object.keys(value).length !== Object.keys(products).length ||
-      Object.entries(products).some(([key, name]) => value[key] !== name)) {
-    fail('RELEASE_INVALID', 'Release products must identify ksf-core, ksf-workspace and the default ksf instance.');
+      Object.keys(value).length !== Object.keys(expected).length ||
+      Object.entries(expected).some(([key, name]) => value[key] !== name)) {
+    fail('RELEASE_INVALID', 'Invalid release product identities.');
   }
 }
 function validateReleaseManifest(manifest, legacy) {
@@ -47,12 +48,12 @@ function validateReleaseManifest(manifest, legacy) {
   return manifest;
 }
 export function validateReceipt(manifest) {
-  if (!manifest || manifest.schema_version !== 4 || manifest.launcher_protocol !== launcherProtocol ||
+  if (!manifest || ![4, 5].includes(manifest.schema_version) || (manifest.schema_version === 5 && manifest.origin !== 'core-template') || manifest.launcher_protocol !== launcherProtocol ||
       manifest.name !== products.core || manifest.product !== products.core ||
       !isRepository(manifest.core?.repository) || !isRevision(manifest.core?.revision) || !isBranch(manifest.core?.branch) ||
       Object.keys(manifest.core).some(key => !['repository', 'branch', 'revision'].includes(key)) ||
       typeof manifest.development !== 'boolean' || !supportedTargets.includes(manifest.platform) ||
-      Object.keys(manifest).some(key => !['schema_version', 'launcher_protocol', 'name', 'product', 'version', 'platform', 'core', 'development'].includes(key))) {
+      Object.keys(manifest).some(key => !['schema_version', 'launcher_protocol', 'name', 'product', 'version', 'platform', 'core', 'development', ...(manifest.schema_version === 5 ? ['origin'] : [])].includes(key))) {
     fail('RELEASE_INVALID', 'Invalid compact Core release receipt.');
   }
   versionParts(manifest.version);
@@ -68,10 +69,10 @@ export function releaseReceipt(manifest) {
     core: { repository: manifest.core.repository, branch: manifest.core.branch, revision: manifest.core.revision },
     development: manifest.development });
 }
-export function validateManifest(manifest) { return manifest?.schema_version === 4 ? validateReceipt(manifest) : validateReleaseManifest(manifest, false); }
+export function validateManifest(manifest) { return [4, 5].includes(manifest?.schema_version) ? validateReceipt(manifest) : validateReleaseManifest(manifest, false); }
 // Compatibility is deliberately limited to reading a committed contribution baseline.
 // Installation, upgrade and recovery still require the current launcher protocol.
-export function validateContributionManifest(manifest) { return manifest?.schema_version === 4 ? validateReceipt(manifest) : validateReleaseManifest(manifest, manifest?.schema_version === 2); }
+export function validateContributionManifest(manifest) { return [4, 5].includes(manifest?.schema_version) ? validateReceipt(manifest) : validateReleaseManifest(manifest, manifest?.schema_version === 2); }
 export function installedManifest(root, optional = false) {
   const data = readJSON(root, '.agents/core/release.json', optional);
   return data === null ? null : validateManifest(data);

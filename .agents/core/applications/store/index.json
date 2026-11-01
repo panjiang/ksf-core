@@ -2813,6 +2813,176 @@
         "description": "Core 内置系统应用占位。当前仅提供空白窗口。",
         "releaseNotes": "新增系统应用占位入口。"
       }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "sdkVersion": 1,
+        "id": "com.ksf.cooperation-center",
+        "name": "KSF合作",
+        "description": "声明可承接事项，以 KSF 实例为单位发起、处理和交付合作任务，管理历史与消息。",
+        "version": "0.4.2",
+        "author": "KSF",
+        "icon": "handshake",
+        "window": {
+          "entry": "frontend/index.js",
+          "multiInstance": false,
+          "defaultSize": {
+            "width": 1180,
+            "height": 780
+          },
+          "minSize": {
+            "width": 520,
+            "height": 440
+          },
+          "styles": [
+            "frontend/assets/cooperation-center-BOy34fri.css"
+          ]
+        },
+        "backend": {
+          "runtime": "node",
+          "entry": "backend/index.mjs",
+          "lifecycle": "resident"
+        },
+        "permissions": [
+          "messages.send",
+          "messages.receive",
+          "ai",
+          "background",
+          "data.export",
+          "workflows.invoke",
+          "codex-conversations",
+          "projects.read"
+        ],
+        "activation": {
+          "messages": {
+            "channels": [
+              "lan.message.v1"
+            ]
+          }
+        },
+        "cli": {
+          "contractVersion": 1,
+          "entry": "cli/index.mjs",
+          "documentation": "docs/cli.md",
+          "commands": [
+            {
+              "id": "peers"
+            },
+            {
+              "id": "conversations"
+            },
+            {
+              "id": "message.send"
+            },
+            {
+              "id": "message.status"
+            },
+            {
+              "id": "message.reconcile"
+            },
+            {
+              "id": "task.create"
+            },
+            {
+              "id": "task.list"
+            },
+            {
+              "id": "task.get"
+            },
+            {
+              "id": "task.action"
+            },
+            {
+              "id": "task.comment"
+            },
+            {
+              "id": "task.material"
+            },
+            {
+              "id": "task.deliver"
+            },
+            {
+              "id": "task.rework"
+            },
+            {
+              "id": "policy.list"
+            },
+            {
+              "id": "policy.match"
+            },
+            {
+              "id": "sync.status"
+            },
+            {
+              "id": "sync.retry"
+            },
+            {
+              "id": "task.export"
+            },
+            {
+              "id": "material.import"
+            },
+            {
+              "id": "material.text"
+            },
+            {
+              "id": "material.read"
+            },
+            {
+              "id": "offer.list"
+            },
+            {
+              "id": "offer.preview"
+            },
+            {
+              "id": "peer.offers"
+            },
+            {
+              "id": "peer.offers.refresh"
+            },
+            {
+              "id": "execution.catalog"
+            },
+            {
+              "id": "task.result"
+            },
+            {
+              "id": "workflow.catalog"
+            }
+          ]
+        },
+        "minCoreVersion": "0.3.5",
+        "dataStores": [
+          {
+            "name": "messages.json",
+            "scope": "user",
+            "schemaVersion": 3,
+            "migrateFrom": [
+              1,
+              2
+            ]
+          }
+        ]
+      },
+      "package": {
+        "url": "com.ksf.cooperation-center-0.4.2.ksfapp",
+        "sha256": "f7363c8ec4c592d09d66ea0ef9da7d8e53b98d5ce2cd605b72b5f43e155fdba7",
+        "size": 344007
+      },
+      "listing": {
+        "subtitle": "在 KSF 实例之间发起、承接和交付任务",
+        "description": "先发布可承接事项，再为每项声明配置本机处理逻辑。合作实例发任务时选择声明，跟踪目标、材料、进展、讨论和成果。默认手动处理始终保留，支持人和 Agent、离线排队、历史检索、关联请求和子任务；B 提交成果即完成。",
+        "releaseNotes": "合作规则升级为承接声明：公开可承接事项、材料要求、交付内容及大致处理方式；按声明选择处理逻辑。旧规则保留为未发布草稿，不扩大授权。默认手动处理无需配置 Agent。",
+        "screenshots": [
+          {
+            "url": "media/93e3e463ec31ccaf59ed31b2ac1d6ac4434fdb5a0fcd1facf44f781184e446c7.jpg",
+            "sha256": "93e3e463ec31ccaf59ed31b2ac1d6ac4434fdb5a0fcd1facf44f781184e446c7",
+            "size": 94556,
+            "alt": "我的承接声明：公开承接内容、处理方式及交付方式，默认手动入口常驻。"
+          }
+        ]
+      }
     }
   ]
 }

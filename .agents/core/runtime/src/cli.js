@@ -33,8 +33,8 @@ if (args.length === 0 || (args.length === 1 && ['--help', '-h'].includes(command
   process.stdout.write('  ksf route --help            Record and query local session routing\n');
   process.stdout.write('  ksf task --help             Archive Codex task turns and routing\n');
   process.stdout.write('  ksf chat --help             Manage current chat turns and dynamic variables\n');
-  process.stdout.write('  ksf launcher recover       Recover an interrupted update without Core or Node\n  ksf release --help          Build ksf-core and ksf-workspace releases\n  ksf system --help           Check, upgrade and roll back installed Core\n  ksf contribute --help       Review system changes and submit a Core PR\n');
-} else if (['release', 'system', 'contribute'].includes(command)) {
+  process.stdout.write('  ksf launcher recover       Recover an interrupted update without Core or Node\n  ksf release --help          Build and publish the single Core release\n  ksf instance --help         Initialize an instance from the Core template\n  ksf system --help           Check, upgrade and roll back installed Core\n  ksf contribute --help       Review system changes and submit a Core PR\n');
+} else if (['release', 'system', 'contribute', 'instance'].includes(command)) {
   const { runDistributionCommand } = await import('./commands/distribution.js');
   const result = await runDistributionCommand(command, options, fileURLToPath(new URL('../../../../', import.meta.url)));
   process.stdout.write(result.stdout);

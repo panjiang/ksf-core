@@ -49,7 +49,7 @@ export function validateCoverage(root, reports, {full=true}={}){
  }
  return {schemaVersion:1,...identity,commit:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,runId:process.env.GITHUB_RUN_ID,runAttempt:process.env.GITHUB_RUN_ATTEMPT,full,platforms,verifiedAt:new Date().toISOString()};
 }
-export function trustedRun(run,repo,sha){return run?.conclusion==='success'&&run.head_sha===sha&&run.head_branch==='main'&&run.head_repository?.full_name===repo&&run.path==='.github/workflows/check.yml'&&['push','workflow_dispatch'].includes(run.event);}
+export function trustedRun(run,repo,sha){return run?.conclusion==='success'&&run.head_sha===sha&&run.head_branch==='core-main'&&run.head_repository?.full_name===repo&&run.path==='.github/workflows/check.yml'&&['push','workflow_dispatch'].includes(run.event);}
 export function validateProof(root,proof,run){
  const identity=sourceIdentity(root),repo=process.env.GITHUB_REPOSITORY,sha=process.env.GITHUB_SHA;
  if(!trustedRun(run,repo,sha)||proof.schemaVersion!==1||!proof.full||proof.commit!==sha||proof.repository!==repo||String(proof.runId)!==String(run.id)||String(proof.runAttempt)!==String(run.run_attempt)||JSON.stringify(proof.platforms)!==JSON.stringify(['darwin','win32'])||proof.sourceDigest!==identity.sourceDigest||proof.catalogDigest!==identity.catalogDigest||JSON.stringify(proof.runtime)!==JSON.stringify(identity.runtime))fail('TEST_PROOF_INVALID','The trusted CI receipt does not match this final source and native runtimes.');

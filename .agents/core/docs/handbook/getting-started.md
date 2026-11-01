@@ -4,7 +4,7 @@
 
 ## 前提与准备
 
-使用匹配当前设备的平台工作区包：macOS ARM64或Windows x64。解压到自己的普通目录；目录名不参与系统版本身份。一台设备默认一个实例，先核实已有实例，避免复制整套运行数据另开服务。
+从官方 Core 模板创建自己的私有仓库并克隆，或下载并校验匹配平台的 Core 包（macOS ARM64/Windows x64），解压到空目录；目录名不参与系统版本身份。一台设备默认一个实例，先核实已有实例，避免复制整套运行数据另开服务。
 
 使用随包入口运行，无需为普通使用预装Node、npm、Python或Git。工程仓库功能需要Git；应用开发另有[开发环境要求](../app-development/quickstart.md)。离线可以使用已有包，安装远程应用或检查更新需要网络。
 
@@ -26,7 +26,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/ksf.ps1 --help
 
 预期hello的ok为true，ksfRoot是当前实例，Node为随包版本。首次调用可能校验和解压运行时；它不检查或安装远程新版。若失败，保留完整错误，按[启动排障](../operations/troubleshooting.md#入口与运行时失败)处理，不手动改manifest或用全局Node绕过。
 
-## 2. 定义必要信息
+## 2. 初始化与定义必要信息
+
+新 Core 模板仓库或更新包先执行固定入口 `instance init --json`，联网验证精确 Core 来源、创建缺少的用户文件，并将本地个人分支改为 `main`。它保留已有个人内容，不提交、推送或修改 origin。完成后重新执行 `context entry --json` 进入孵化。已初始化实例无需重做；完整过程见[实例初始化](../cli/instance.md)。
 
 阅读根USER.md和BOT.md，填写或明确要求Agent维护自己的稳定身份、偏好及协作方式。两份文件保持普通Markdown；技术身份与实例名称另由配置中心维护。
 

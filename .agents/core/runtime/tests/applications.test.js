@@ -1,7 +1,7 @@
 import {shellCommands,terminalText} from './helpers/platform.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:http';
@@ -25,6 +25,14 @@ async function fixture(t) {
   const install = async (item = one, sourceId = 'builtin') => manager.install({ trusted: true, sourceId, appId: item.entry.manifest.id, version: item.entry.manifest.version, digest: item.entry.package.sha256 });
   return { root, store, manager, one, writeIndex, install };
 }
+test('releasing a lease with no pending installation preserves registry bytes and file identity', async t => {
+  const f = await fixture(t); await f.install();
+  const path = join(f.root, '.agents/user-data/applications/state.json'), before = await readFile(path), identity = await stat(path);
+  const instance = await f.manager.launch(f.one.entry.manifest.id, f.one.entry.package.sha256);
+  await f.manager.release(instance.id);
+  assert.deepEqual(await readFile(path), before);
+  const after = await stat(path); assert.equal(after.ino, identity.ino); assert.equal(after.mtimeMs, identity.mtimeMs);
+});
 
 test('package validation rejects traversal, case collisions, missing entries and changed content', () => {
   const one = release(); assert.equal(decodePackage(one.bytes).manifest.id, 'com.example.echo');

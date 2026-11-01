@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { distributionFixture } from './helpers/distribution-fixture.js';
+import { distributionFixture, instanceEntries } from './helpers/distribution-fixture.js';
 import { readUserData, writeUserData } from '../src/services/user-data.js';
 import { recordDefinition } from '../src/user-data/records.js';
 import { systemUpdate, systemRollback } from '../src/distribution/system.js';
@@ -25,8 +25,7 @@ test('Core packages exclude even invalid object records; instance policies track
   const f = await distributionFixture(t), path = join(f.root, recordDefinition(undefined, 'partner.test.private').path);
   mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, 'PRIVATE_OBJECT_DATA_CANARY');
   const built = await buildRelease({ root: f.root, output: join(f.directory, 'object-data-exclusion') });
-  for (const product of ['ksf-core', 'ksf-workspace']) {
-    const archive = readArchive(readFileSync(join(built.output, `${product}-0.1.0-${fixtureTarget}.tar.gz`)));
+  for (const archive of [readArchive(readFileSync(join(built.output, `ksf-core-0.1.0-${fixtureTarget}.tar.gz`))), instanceEntries(built.instance)]) {
     assert.ok([...archive.values()].every(file => !file.bytes.includes(Buffer.from('PRIVATE_OBJECT_DATA_CANARY'))));
     assert.ok(![...archive.keys()].some(name => name.startsWith('.agents/user-data/abilities/')));
   }

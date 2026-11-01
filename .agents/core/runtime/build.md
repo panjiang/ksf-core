@@ -21,9 +21,7 @@ bundled archive's repository-relative path and trusted official SHA256. A KSF
 version that has not been decided remains `null`; the command never invents or
 automatically increments it. Pin changes are deliberate release decisions.
 
-Build inputs and generated declarations use `name: ksf-core`. The user template is
-a separate ksf-workspace release product; a user instance is named ksf or any
-user-chosen name.
+Build inputs and generated declarations use `name: ksf-core`. Core itself is the template on core-main; a private instance uses main and is named ksf or any user-chosen name. Only Core archives and their index are published.
 
 [`../manifest.yaml`](../manifest.yaml) is generated output. Do not manually edit
 it or ask an Agent to fill its metadata. Change the build input and artifacts,
@@ -54,8 +52,8 @@ knowledge and `.agents/runtime-data` are outside that system source boundary.
 
 The `build` command has a deliberate startup branch independent of its output:
 
-1. Native macOS `plutil` reads the fixed runtime pins from `build.json` before
-   Node.js is available.
+1. Native macOS `plutil` or Windows PowerShell reads the fixed runtime pins
+   from `build.json` before Node.js is available.
 2. The entry verifies the archive's trusted SHA256 and required regular file
    entries, then derives the executable SHA256 itself.
 3. The existing installation mechanism prepares/reuses this exact Node.js and
@@ -68,11 +66,12 @@ The `build` command has a deliberate startup branch independent of its output:
    `manifest.yaml` on the same filesystem. A failure leaves the previous manifest
    unchanged; failed temporary writes are removed.
 
-Different targets must use the same exact Node.js version. The current bootstrap
-supports macOS and requires its host package in the build input; the bundled and
-verified target is macOS ARM64. The generator can describe an additionally
-supplied macOS x64 archive without executing that foreign executable. It does
-not implement Windows/Linux bootstraps or verify foreign binaries by running them.
+Different targets must use the same exact Node.js version. Fixed launchers support
+macOS and Windows and require the matching host archive in the build input.
+Current bundled targets are macOS ARM64 and Windows x64. The generator can also
+inspect a supplied macOS x64 archive. Foreign archives are checked for structure
+and hashes without executing their binaries; those checks do not certify native
+behavior on that platform. Native acceptance is recorded separately.
 
 The trusted archive SHA256 must come from the official release source. Computing
 a new pin from an arbitrary downloaded file is not equivalent to verifying it.

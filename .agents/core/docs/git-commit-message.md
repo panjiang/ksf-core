@@ -94,9 +94,9 @@ Agent 通过 `git commit -m/-F` 或 API 创建开发提交，也必须遵循同�
 
 prepare 必须明确提供标题及完整正文，支持 `--body` 或 `--body-file` 二选一；正文文件不包含标题。程序在 Git／网络读取前校验，拒绝泛化默认标题或缺少必填字段的说明。原因、变更和验证由 Agent 根据选定公开内容整理，程序不代编动机或测试结论。
 
-新计划 schema_version 为 4，冻结完整 commitMessage 并纳入 digest。read、submit dry-run 和审阅输出均可检查同一份文本，真实提交使用该文本作为完整 Git message，不从个人 Git 历史取正文。PR 与 Git 共用标题，正文按[PR 说明规则](pr-description.md)单独提供并冻结，包含 prepare 阶段生成的来源说明。首次发布前修改消息须重新准备和审阅，已发布内容不在重试时自动改写。
+新计划 schema_version 为 5，冻结完整 commitMessage、精确 Core 来源与 core-main 目标并纳入 digest。read、submit dry-run 和审阅输出均可检查同一份文本，真实提交使用该文本作为完整 Git message，不从个人 Git 历史取正文。PR 与 Git 共用标题，正文按[PR 说明规则](pr-description.md)单独提供并冻结，包含 prepare 阶段生成的来源说明。首次发布前修改消息须重新准备和审阅，已发布内容不在重试时自动改写。
 
-旧 schema 1／2／3 计划保持可读；已记录发布的计划只读核对已有 PR，不改写旧消息。未发布旧计划须按新规则重新准备，不在旧审阅摘要下补造正文。schema 3 的冻结消息仍在远程核对，保持原有重复 PR 和失败恢复保护。
+旧 schema 1／2／3／4 计划保持可读；已记录发布的计划只读核对已有 PR，不改写旧消息。未发布旧计划须按新规则重新准备，不在旧审阅摘要下补造正文。schema 3 的冻结消息仍在远程核对，保持原有重复 PR 和失败恢复保护。
 
 ## 依据
 

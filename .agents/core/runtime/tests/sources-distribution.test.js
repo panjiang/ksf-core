@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { distributionFixture } from './helpers/distribution-fixture.js';
+import { distributionFixture, instanceEntries } from './helpers/distribution-fixture.js';
 import { readArchive } from '../src/distribution/archive.js';
 import { buildRelease } from '../src/distribution/release.js';
 import { abilitySource } from '../src/services/sources.js';
@@ -34,8 +34,7 @@ test('real launcher works offline across cwd and keeps direct source content out
   mkdirSync(join(f.root, '.agents/user-data'), { recursive: true });
   writeFileSync(join(f.root, '.agents/user-data/sources.json'), s.canary);
   const release = await buildRelease({ root: f.root, platform:fixtureTarget, output: join(f.directory, 'source-isolation-release') });
-  for (const name of [`ksf-core-0.1.0-${fixtureTarget}.tar.gz`, `ksf-workspace-0.1.0-${fixtureTarget}.tar.gz`]) {
-    const archive = readArchive(readFileSync(join(release.output, name)));
+  for (const archive of [readArchive(readFileSync(join(release.output, `ksf-core-0.1.0-${fixtureTarget}.tar.gz`))), instanceEntries(release.instance)]) {
     assert.ok([...archive.values()].every(file => !file.bytes.includes(Buffer.from(s.canary))));
     assert.ok([...archive.keys()].every(path => !path.includes('sources.json') && !path.startsWith('repositories/')));
   }

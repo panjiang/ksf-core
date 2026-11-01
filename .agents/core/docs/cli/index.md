@@ -32,7 +32,8 @@
 | incubate | 首次设置、预检提交、恢复与明确跳过 | [incubation](incubation.md) |
 | project | 项目根卡与目录的基础管理 | [project](project.md) |
 | repository | 本地独立 Git 工程创建、项目关联与检查 | [repository](repository.md) |
-| release | 发行构建、发布和官方模板镜像 | [release](release.md) |
+| instance | 从 Core 模板验证来源并初始化个人实例 | [instance](instance.md) |
+| release | 单一 Core 发行构建与发布 | [release](release.md) |
 | system | 工作区版本检查、升级、恢复和回滚 | [system](system.md) |
 | contribute | HEAD 已提交系统修改的审查与 Core PR | [contribute](contribute.md) |
 | commit-message | 提交信息格式检查与填写模板 | [commit-message](commit-message.md) |

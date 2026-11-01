@@ -65,11 +65,11 @@
 
 `contribute prepare` 保留 `--body/--body-file` 作为 Git 正文，另外要求 `--pr-body/--pr-body-file` 二选一作为 PR 正文；参数及文件说明见[contribute](cli/contribute.md)。缺少独立 PR 输入不自动套用 Git 正文。标题与两份正文的格式在读取 Git 或网络前检查，随后取得正式基线，将来源说明加入完整 PR 正文。
 
-新计划 schema 4 保存共同 title、Git body、完整 commitMessage、规范化的 PR 主体 prDescription，以及含自动来源说明的完整 prBody；这些全部纳入 digest。prepare、read 与 submit dry-run 都能展示实际发布文本。submit 创建提交与草稿 PR 时使用各自冻结文本，不在发布阶段临时追加内容。生成来源只包括正式 Core 版本、原版提交及选定系统差异说明，不公开实例本地 sourceCommit。
+新计划 schema 5 分开记录精确 Core 来源与 core-main 目标，保存共同 title、Git body、完整 commitMessage、规范化的 PR 主体 prDescription，以及含自动来源说明的完整 prBody；这些全部纳入 digest。prepare、read 与 submit dry-run 都能展示实际发布文本。submit 创建提交与草稿 PR 时使用各自冻结文本，不在发布阶段临时追加内容。生成来源只包括正式 Core 版本、原版提交及选定系统差异说明，不公开实例本地 sourceCommit。
 
 首次发布前修改标题、正文或 HEAD 需重新准备和审阅。创建后 PR 说明可在用户授权下通过正常托管工具随评审补充，冻结的 Git 提交及本地贡献计划保持原样。普通重试只核对 PR 身份、目标、提交和状态，不覆盖已编辑的远程标题或正文；这不表示远程文字仍与最初审阅文本一致。准备送审时重新核对当前说明和差异，草稿转 Ready for review 按用户请求执行。
 
-旧 schema 1／2／3 计划保持可读，不在旧 digest 下补造 PR 文本。没有已有发布记录时重新 prepare；有已有记录时只能只读核对既有 PR，不能创建远程对象或改写旧记录。schema 3 的冻结提交消息仍须核对。重复内容识别、部分成功恢复及未明状态保护继续适用。
+旧 schema 1／2／3／4 计划保持可读，不在旧 digest 下补造 PR 文本。没有已有发布记录时重新 prepare；有已有记录时只能只读核对既有 PR，不能创建远程对象或改写旧记录。schema 3 的冻结提交消息仍须核对。重复内容识别、部分成功恢复及未明状态保护继续适用。
 
 ## 参考
 

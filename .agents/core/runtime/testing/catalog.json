@@ -1261,7 +1261,12 @@
         ".gitattributes",
         "README.md"
       ],
-      "requirements": [],
+      "requirements": [
+        {
+          "name": "es-module-lexer",
+          "component": "sdk"
+        }
+      ],
       "timeoutMs": 120000,
       "seconds": {
         "darwin": 1.21,
@@ -5381,27 +5386,20 @@
       "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
     },
     {
-      "id": "core:template-git",
-      "path": ".agents/core/runtime/tests/template-git.test.js",
+      "id": "core:instance-initialization",
+      "path": ".agents/core/runtime/tests/instance-initialization.test.js",
       "owner": "core",
       "covers": [
         "core"
       ],
-      "suite": "quick",
+      "suite": "full",
       "platforms": [
         "darwin",
         "win32"
       ],
       "cacheable": false,
       "inputs": [
-        ".agents/core/runtime/src",
-        ".agents/core/runtime/tests/helpers",
-        ".agents/core/abilities",
-        ".agents/core/docs",
-        ".agents/core/distribution",
-        ".agents/core/build.json",
-        ".agents/core/applications/sdk/src",
-        ".agents/core/applications/sdk/server",
+        ".agents/core",
         ".github",
         "AGENTS.md",
         ".agents/ksf",
@@ -5411,12 +5409,12 @@
         "README.md"
       ],
       "requirements": [],
-      "timeoutMs": 120000,
+      "timeoutMs": 600000,
       "seconds": {
-        "darwin": 15.37,
-        "win32": 23.95
+        "darwin": 90,
+        "win32": 120
       },
-      "timingBasis": "Native CI 41184436954 observed file durations; same-platform two-file concurrency, dependency preparation excluded."
+      "timingBasis": "Scheduling estimate for initialization, provenance and process-crash recovery; native CI timing not yet recorded."
     },
     {
       "id": "core:terminal-lifecycle",

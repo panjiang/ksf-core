@@ -2,7 +2,7 @@
 id: "competency.ksf.system-contribute"
 name: "系统贡献"
 description: "从用户实例最新本地提交选择系统差异，与该提交中的原版 Core 基线比较并冻结审阅，按授权提交纯系统 PR，核对远程状态并恢复部分成功。"
-version: 0.1.3
+version: 0.1.4
 status: active
 references: []
 ---
@@ -27,3 +27,5 @@ references: []
 交付选定路径、本地 sourceCommit、Core 基线、ID、审阅摘要、验证结果与实际 PR 状态；没有远程结果不声称已创建或合并。CLI 及协议见[contribute](../../../docs/cli/contribute.md)与[发行协议](../../../docs/distribution.md)。凭证仅按现有认证契约取得，错误不得回显秘密。
 
 模拟正例：选定修复经审阅后提交，网络中断后找到同一 PR。反例：把个人 main 整体推给 Core，或只返回旧缓存 URL 就宣称远程未变。边界例：远程分支被改、PR 已关闭、预览后 HEAD 前进，分别停止覆盖、报告状态或重新准备；仅工作目录继续修改不影响冻结贡献。程序测试使用模拟 API；没有真实远程提交时明确标注。
+
+新贡献计划将 core 的精确来源与 target 的 core-main 目标分开，旧来源 branch=main 不改写。官方根文档和 CI 从 Core 内规范源显式投影，必须连同目标路径一起审阅，不读取个人根文件。旧 schema 4 计划仅能核对既有发布，重新 prepare 才能发起新 PR。

@@ -26,15 +26,17 @@ test('CI proof requires complete disjoint native coverage and exact trusted sour
  writeFileSync(join(root,'.agents/core/runtime/tests/a.test.js'),'changed');assert.throws(()=>validateCoverage(root,reports),{code:'TEST_PROOF_INVALID'});
 });
 test('CRLF-enabled Git checkout preserves the exact bytes used by native source proofs',t=>{
+ for(const attributesPath of [new URL('../../../../.gitattributes',import.meta.url),new URL('../../distribution/template/.gitattributes',import.meta.url)]){
  const root=proofFixture(t),clone=root+'-checkout';t.after(()=>rmSync(clone,{recursive:true,force:true}));
  mkdirSync(join(root,'.github/workflows'),{recursive:true});
- writeFileSync(join(root,'.gitattributes'),readFileSync(fileURLToPath(new URL('../../../../.gitattributes',import.meta.url))));
+ writeFileSync(join(root,'.gitattributes'),readFileSync(fileURLToPath(attributesPath)));
  writeFileSync(join(root,'.gitignore'),'.cache/\n');writeFileSync(join(root,'README.md'),'# UTF-8 source\n');writeFileSync(join(root,'.github/workflows/check.yml'),'name: UTF-8 proof\n');
  const git=args=>{const r=spawnSync(gitBinary,['-C',root,...args],{encoding:'utf8',env:{...process.env,GIT_CONFIG_GLOBAL:nullDevice,GIT_CONFIG_SYSTEM:nullDevice}});assert.equal(r.status,0,r.stderr);};
  git(['add','--','.gitattributes','.gitignore','README.md','.github']);git(['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-m','fixture']);
  git(['clone','--no-local','--template=','-c','core.autocrlf=true',root,clone]);
  for(const path of ['.gitattributes','.gitignore','README.md','.github/workflows/check.yml'])assert.deepEqual(readFileSync(join(clone,path)),readFileSync(join(root,path)),path);
  assert.deepEqual(sourceIdentity(clone),sourceIdentity(root));
+ }
 });
 test('restored local SDK copies become workspace links before Node imports TypeScript',t=>{
  const root=proofFixture(t),sdk=join(root,'.agents/core/applications/sdk'),app=join(root,'.agents/core/applications/example');
@@ -51,7 +53,7 @@ test('restored local SDK copies become workspace links before Node imports TypeS
  writeFileSync(join(app,'package.json'),JSON.stringify({devDependencies:{'@ksf/sdk':'file:../../../outside'}}));assert.throws(()=>restorePreparedLinks(root),{code:'TEST_CI_PREPARATION_INVALID'});assert.equal(realpathSync(join(app,'node_modules/@ksf/sdk')),realpathSync(sdk));
 });
 test('release proof trust excludes PRs, foreign repositories, other workflows and failed attempts',()=>{
- const run={id:1,run_attempt:1,conclusion:'success',head_sha:'sha',head_branch:'main',head_repository:{full_name:'official/core'},path:'.github/workflows/check.yml',event:'push'};
+ const run={id:1,run_attempt:1,conclusion:'success',head_sha:'sha',head_branch:'core-main',head_repository:{full_name:'official/core'},path:'.github/workflows/check.yml',event:'push'};
  assert.equal(trustedRun(run,'official/core','sha'),true);
- for(const override of [{event:'pull_request'},{head_repository:{full_name:'fork/core'}},{head_branch:'feature'},{conclusion:'failure'},{head_sha:'old'},{path:'.github/workflows/release.yml'}])assert.equal(trustedRun({...run,...override},'official/core','sha'),false);
+ for(const override of [{event:'pull_request'},{head_repository:{full_name:'fork/core'}},{head_branch:'feature'},{head_branch:'main'},{conclusion:'failure'},{head_sha:'old'},{path:'.github/workflows/release.yml'}])assert.equal(trustedRun({...run,...override},'official/core','sha'),false);
 });

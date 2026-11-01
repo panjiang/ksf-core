@@ -1,10 +1,10 @@
 import{platform}from'../src/platform/index.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtempSync, mkdirSync, cpSync, writeFileSync, readFileSync, readdirSync, lstatSync, rmSync, symlinkSync, renameSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, cpSync, writeFileSync, readFileSync, readdirSync, lstatSync, rmSync, symlinkSync, renameSync, realpathSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { planMaterials, applyMaterials } from '../src/services/project-intake.js';
 
@@ -79,9 +79,26 @@ test('deleted imported directories are not rebuilt by a new incoming file', t =>
 });
 
 test('removed source files retain the project copy and report the missing source', t => {
-  const f = fixture(t); f.apply(f.plan()); rmSync(join(f.source, '需求', '说明.md'));
-  const result = f.apply(f.plan()); assert.equal(result.ok, false); assert.equal(lstatSync(f.target('需求/说明.md')).isFile(), true);
-  assert.ok(result.results.some(row => row.code === 'INTAKE_SOURCE_MISSING'));
+  const f = fixture(t), first = f.apply(f.plan()); assert.equal(first.ok, true, JSON.stringify(first)); rmSync(join(f.source, '需求', '说明.md'));
+  const plan = f.plan(), result = f.apply(plan); assert.equal(result.ok, false); assert.equal(lstatSync(f.target('需求/说明.md')).isFile(), true);
+  assert.ok(result.results.some(row => row.code === 'INTAKE_SOURCE_MISSING'), JSON.stringify({plan,result}));
+});
+
+test('Windows receipt replacement recovers a transient native sharing lock', {skip:platform.name!=='win32'&&'Native Windows file-sharing semantics'}, async t => {
+  const f=fixture(t),first=f.apply(f.plan());assert.equal(first.ok,true,JSON.stringify(first));
+  const receipt=join(f.root,first.record),ready=join(f.temp,'lock-ready'),attempt=join(f.temp,'publish-attempt');
+  writeFileSync(join(f.source,'补充.md'),'补充材料');
+  const quote=value=>"'"+value.replaceAll("'","''")+"'";
+  const script=`$ErrorActionPreference='Stop';$h=[IO.File]::Open(${quote(receipt)},[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite);try{[IO.File]::WriteAllText(${quote(ready)},'ready');$end=[DateTime]::UtcNow.AddSeconds(10);while(-not(Test-Path -LiteralPath ${quote(attempt)})){if([DateTime]::UtcNow -gt $end){throw 'Publication did not start'};Start-Sleep -Milliseconds 10};Start-Sleep -Milliseconds 250}finally{$h.Dispose()}`;
+  const child=spawn('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{windowsHide:true,stdio:['ignore','ignore','pipe']});let stderr='';child.stderr.on('data',bytes=>stderr+=bytes);
+  const exited=new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});
+  try{
+    const deadline=Date.now()+10000;while(!existsSync(ready)&&child.exitCode===null&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));
+    assert.ok(existsSync(ready),stderr||'Native sharing lock was not acquired');
+    const result=f.apply(f.plan(),{beforeReceipt(){writeFileSync(attempt,'publish');}});
+    assert.equal(result.ok,true,JSON.stringify(result));assert.equal(await exited,0,stderr);
+    assert.equal(readFileSync(f.target('补充.md'),'utf8'),'补充材料');assert.equal(f.apply(f.plan()).changed,false);
+  }finally{if(child.exitCode===null)child.kill();await exited.catch(()=>{});}
 });
 
 test('a single external file is copied and repeat adoption skips it', t => {

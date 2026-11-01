@@ -105,7 +105,7 @@ async function createFixtureBase(t, { legacyEntry = false, sourceRoot = reposito
   } } };
   writeAtomic(join(root, '.agents/core/build.json'), stableJSON(build));
   await buildManifest(root);
-  git(root, ['init', '--template=', '--initial-branch=main']);
+  git(root, ['init', '--template=', '--initial-branch=core-main']);
   git(root, ['config', 'user.name', 'KSF Fixture']); git(root, ['config', 'user.email', 'fixture@example.invalid']);
   git(root, ['config', 'commit.gpgsign', 'false']);
   git(root, ['add', '.agents', 'AGENTS.md', '.gitignore']); git(root,['update-index','--chmod=+x','.agents/ksf']); git(root, ['commit', '-m', 'Fictional clean Core source']);
@@ -115,6 +115,7 @@ async function createFixtureBase(t, { legacyEntry = false, sourceRoot = reposito
     // Existing suites exercise upgrades from the former schema-3 installation.
     // New compact-receipt suites opt in explicitly and use a read-only fake API.
     const { manifest, entries } = inspectCoreArchive(readFileSync(join(first.output, first.index.platforms[fixtureTarget].core.name)));
+    delete manifest.instance_initialization;
     for (const [path, record] of Object.entries(manifest.files)) {
       const bytes = entries.get(path).bytes;
       if (!bytes.includes(0) && Buffer.from(bytes.toString('utf8')).equals(bytes) && path !== '.agents/core/manifest.yaml') record.baseline = bytes.toString('base64');
@@ -141,7 +142,7 @@ export async function distributionFixture(t, options = {}) {
     cpSync(seed.root, root, { recursive: true });
     cpSync(seed.workspace, workspace, { recursive: true });
     cpSync(seed.first.output, output, { recursive: true });
-    base = { directory, root, workspace, first: { ...structuredClone(seed.first), output, template: join(output, 'ksf-workspace') }, build: structuredClone(seed.build), originals: new Map(), legacyEntry: false };
+    base = { directory, root, workspace, first: { ...structuredClone(seed.first), output, instance: join(output, 'ksf'), template: join(output, 'ksf') }, build: structuredClone(seed.build), originals: new Map(), legacyEntry: false };
   }
   const { directory, root, workspace, first, build, originals } = base;
   const fixtureMs = performance.now()-began;
@@ -163,7 +164,7 @@ export async function distributionFixture(t, options = {}) {
     const packStarted=performance.now();
     const result = await buildRelease({ root, platform:fixtureTarget, output: join(directory, `release-${version}`) });
     packageMs+=performance.now()-packStarted;
-    const index = JSON.parse(readFileSync(join(result.output, 'ksf-core-release.json'), 'utf8'));
+    const index = JSON.parse(readFileSync(join(result.output, 'ksf-core-index.json'), 'utf8'));
     for (const item of Object.values(index.platforms[fixtureTarget])) item.url = pathToFileURL(join(result.output, item.name)).href;
     const source = join(directory, `feed-${version}.json`); writeAtomic(source, stableJSON(index));
     return { ...result, source, coreArchive: join(result.output, index.platforms[fixtureTarget].core.name), feed: index };
@@ -173,4 +174,16 @@ export async function distributionFixture(t, options = {}) {
     env: { ...process.env, PATH: '', KSF_SKIP_AUTO_UPDATE: '1', ...options.env },
   }); };
   return { directory, root, workspace, first, next, save, launch, build };
+}
+
+export function instanceEntries(root) {
+  const entries = new Map();
+  function visit(relativePath) {
+    for (const entry of readdirSync(join(root, relativePath), { withFileTypes: true })) {
+      const path = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) visit(path);
+      else entries.set(path, { path, bytes: readFileSync(join(root, path)), mode: fileMode(join(root, path)) });
+    }
+  }
+  visit(''); return entries;
 }

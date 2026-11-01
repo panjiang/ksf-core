@@ -16,7 +16,7 @@
 
 build 校验固定输入与真实压缩包，推导可执行文件摘要，并对系统资产生成摘要。文档和测试也属于系统源资产，因此修改本目录后需要通过既有 build 刷新 manifest。生成前再次核对输入与源码未变化，使用同目录临时文件发布；build 不自动递增版本、提交或发布。
 
-三个产品身份由 [products.js](../../runtime/src/distribution/products.js)统一定义：ksf-core 是系统源与更新包；ksf-workspace 是生成的用户模板；ksf 或自定义名称是用户实例。模板包含系统、初始说明与空用户目录，不复制维护者的真实个人数据。
+系统与实例身份由 [products.js](../../runtime/src/distribution/products.js)统一定义：ksf-core 同时是系统源、模板与唯一更新产品；ksf 或自定义名称是个人实例。官方主线 core-main，个人 main；初始化验证模板完整树并固定精确 Core SHA。模板包含系统、初始说明与空用户目录，不复制维护者的真实个人数据。
 
 ## 从源码到发行包
 

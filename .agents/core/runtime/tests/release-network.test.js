@@ -25,10 +25,10 @@ test('new users check the public index asset without an anonymous REST API reque
 
 test('a real HTTP Release API/index/archive chain upgrades a copied workspace on loopback', async t => {
   const f = await distributionFixture(t), next = await f.next();
-  const index = JSON.parse(readFileSync(join(next.output, 'ksf-core-release.json')));
+  const index = JSON.parse(readFileSync(join(next.output, 'ksf-core-index.json')));
   let origin;
   const server = createServer((request, response) => {
-    if (request.url === '/latest') response.end(stableJSON({ draft: false, prerelease: false, assets: [{ name: 'ksf-core-release.json', browser_download_url: origin + '/index.json' }] }));
+    if (request.url === '/latest') response.end(stableJSON({ draft: false, prerelease: false, assets: [{ name: 'ksf-core-index.json', browser_download_url: origin + '/index.json' }] }));
     else if (request.url === '/index.json') response.end(stableJSON(index));
     else if (request.url === '/core.tar.gz') response.end(readFileSync(next.coreArchive));
     else { response.statusCode = 404; response.end(); }
@@ -42,12 +42,12 @@ test('a real HTTP Release API/index/archive chain upgrades a copied workspace on
 });
 test('release discovery requires one unambiguous ksf-core index asset', async () => {
   const base = 'https://example.invalid', index = { version: '0.1.2' };
-  const assets = [{ name: 'ksf-core-release.json', browser_download_url: base + '/index' }];
+  const assets = [{ name: 'ksf-core-index.json', browser_download_url: base + '/index' }];
   const fetcher = async url => new Response(stableJSON(url.pathname === '/latest' ? { assets } : index));
   assert.deepEqual((await releaseIndex(base + '/latest', { fetcher })).index, index);
   assets.length = 0;
   await assert.rejects(releaseIndex(base + '/latest', { fetcher }), { code: 'RELEASE_INVALID' });
-  assets.unshift({ name: 'ksf-core-release.json' }, { name: 'ksf-core-release.json' });
+  assets.unshift({ name: 'ksf-core-index.json' }, { name: 'ksf-core-index.json' });
   await assert.rejects(releaseIndex(base + '/latest', { fetcher }), { code: 'RELEASE_INVALID' });
 });
 test('downloads reject public plaintext HTTP, credentials, unsafe redirects and oversized streaming bodies', async () => {

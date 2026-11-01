@@ -9,6 +9,7 @@ permissions:
   contents: read
 jobs:
   platform:
+    if: github.repository == 'yinbaiyuan/ksf-core'
     strategy:
       fail-fast: false
       matrix:
@@ -85,7 +86,7 @@ jobs:
           name: failure-platform-${{ runner.os }}
           path: .agents/runtime-data/tests/
   full:
-    if: inputs.full
+    if: inputs.full && github.repository == 'yinbaiyuan/ksf-core'
     needs: platform
     strategy:
       fail-fast: false
@@ -143,7 +144,7 @@ jobs:
           name: failure-${{ matrix.id }}
           path: .agents/runtime-data/tests/
   coverage:
-    if: always()
+    if: always() && github.repository == 'yinbaiyuan/ksf-core'
     needs: [platform, full]
     runs-on: macos-15
     steps:

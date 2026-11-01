@@ -55,8 +55,8 @@ test('desktop shortcut format blocks older Core readers without changing the per
  const result=await inspectCoreDataCompatibility(f.root,f.candidate);assert.equal(result.compatible,false);assert(result.errors.some(item=>item.format==='namespaces'&&item.actual===2));assert.equal(await readFile(path,'utf8'),before);
 });
 
-test('renamed and legacy Git locators use the same authoritative reader and preserve corrupt originals',async t=>{
- const f=await fixture(t);for(const id of ['git','com.ksf.git']){const path=await f.write('.agents/user-data/applications/data/'+id+'/operations.json',{unexpected:true}),before=await readFile(path);const result=await inspectCoreDataCompatibility(f.root,f.candidate);assert.equal(result.compatible,false);assert(result.errors.some(e=>e.format==='git-operation-ledger'));assert.deepEqual(await readFile(path),before);await rm(path);}
+test('runtime, renamed and legacy Git locators use the same authoritative reader and preserve corrupt originals',async t=>{
+ const f=await fixture(t);for(const location of ['.agents/runtime-data/applications/data/com.ksf.git','.agents/user-data/applications/data/git','.agents/user-data/applications/data/com.ksf.git']){const path=await f.write(location+'/operations.json',{unexpected:true}),before=await readFile(path);const result=await inspectCoreDataCompatibility(f.root,f.candidate);assert.equal(result.compatible,false);assert(result.errors.some(e=>e.format==='git-operation-ledger'));assert.deepEqual(await readFile(path),before);await rm(path);}
 });
 
 test('cooperation statement schema requires a compatible Core and never rewrites rules during preflight',async t=>{

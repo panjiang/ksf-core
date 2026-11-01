@@ -1,32 +1,16 @@
-# Core 根目录只收录以下系统入口和源码目录。
-# 项目、知识等用户目录及其他本机文件默认忽略；新增根文件需明确放行。
+# Official Core source only. Personal data never enters this repository.
 /*
-!/.gitignore
+!/.agents/
+!/.github/
 !/AGENTS.md
 !/README.md
+!/.gitignore
 !/.gitattributes
-!/.github/
-!/.agents/
-
-# .agents 只收录固定入口和可升级系统；user-data 属于用户实例，runtime-data 属于本机，均不进入 Core。
 /.agents/*
+!/.agents/core/
 !/.agents/ksf
 !/.agents/ksf.ps1
-!/.agents/core/
-
-# 仅在发行包中生成的来源与升级基线，不作为 Core 源码提交。
 /.agents/core/release.json
-
-# 原子写入中断时可能留下的临时清单。
-/.agents/core/.manifest.yaml.*.tmp
-
-# 各层级的 macOS 目录缓存。
-.DS_Store
-
-# 已跟踪文件不受忽略规则保护，提交前仍须检查差异。
-
-# Local dependency installations and build caches are not Core source.
-/.agents/core/applications/*/node_modules/
-/.agents/core/applications/*/.build/
-/.agents/core/runtime/native-build/node_modules/
-/.agents/core/runtime/vendor-build/node_modules/
+**/node_modules/
+**/.build/
+**/.DS_Store

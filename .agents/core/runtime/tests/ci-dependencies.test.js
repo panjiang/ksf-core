@@ -6,9 +6,14 @@ import {test} from 'node:test';
 import {spawnSync} from 'node:child_process';
 import YAML from '../src/vendor/yaml/dist/index.js';
 
+function repositoryWorkflows(t) {
+  const root = fileURLToPath(new URL('../../../../', import.meta.url));
+  const directory = join(root, '.agents/core/distribution/repository/.github/workflows');
+  return directory;
+}
+
 test('CI prepares locked toolchains once per platform and restores them before full shards', t => {
-  const directory = fileURLToPath(new URL('../../../../.github/workflows/', import.meta.url));
-  if (!existsSync(directory)) { t.skip('Installed packages exclude workflows.'); return; }
+  const directory = repositoryWorkflows(t); if (!directory) return;
   const verification = YAML.parse(readFileSync(join(directory, 'verification.yml'), 'utf8'));
   const setup = verification.jobs.platform.steps, full = verification.jobs.full.steps;
   for (const part of ['applications/sdk', 'applications/projects', 'runtime/web']) {
@@ -19,13 +24,12 @@ test('CI prepares locked toolchains once per platform and restores them before f
   assert.ok(!full.some(s => /npm (?:test|ci)|release build|npm run build/.test(s.run ?? '')));
   for (const step of [...setup,...full]) assert.ok(!step.env?.NODE_OPTIONS);
   const check = YAML.parse(readFileSync(join(directory, 'check.yml'), 'utf8'));
-  assert.equal(check.jobs.required.if, 'always()');assert.deepEqual(check.jobs.required.needs, ['plan','verification']);
+  assert.equal(check.jobs.required.if, "always() && github.repository == 'yinbaiyuan/ksf-core'");assert.deepEqual(check.jobs.required.needs, ['plan','verification']);
   assert.ok(!check.on.pull_request.paths && !check.on.push.paths);
 });
 
 test('CI verifies the shipped runtime through a launcher without forging bootstrap proof', t => {
-  const directory = fileURLToPath(new URL('../../../../.github/workflows/', import.meta.url));
-  if (!existsSync(directory)) { t.skip('Installed Core packages do not include repository workflows.'); return; }
+  const directory = repositoryWorkflows(t); if (!directory) return;
   let checks = 0;
   for (const name of readdirSync(directory).filter(name => /\.ya?ml$/.test(name))) {
     const workflow = YAML.parse(readFileSync(join(directory, name), 'utf8'));
@@ -44,8 +48,7 @@ test('CI verifies the shipped runtime through a launcher without forging bootstr
 });
 
 test('CI Node environment flags can start the bundled runtime before selecting tests', t => {
-  const directory = fileURLToPath(new URL('../../../../.github/workflows/', import.meta.url));
-  if (!existsSync(directory)) { t.skip('Installed Core packages do not include repository workflows.'); return; }
+  const directory = repositoryWorkflows(t); if (!directory) return;
   let checked = 0;
   for (const name of readdirSync(directory).filter(name => /\.ya?ml$/.test(name))) {
     const workflow = YAML.parse(readFileSync(join(directory, name), 'utf8'));

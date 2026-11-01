@@ -2,7 +2,7 @@
 id: "competency.ksf.system-update"
 name: "系统版本维护"
 description: "核实 KSF 实例版本、来源和本地差异，区分查询、预览、显式升级与回滚；依照发行基线合并、验证候选、事务切换和恢复，保留用户资产并报告实际状态。"
-version: 0.1.1
+version: 0.1.2
 status: active
 references: []
 ---
@@ -31,3 +31,5 @@ references: []
 交付操作类型、实际根与来源、前后版本、变化或冲突路径、备份、验证结果和未决项。用户项目、知识、能力、Git 配置、README 与忽略规则不因版本切换被改写。程序协议与参数见[system CLI](../../../docs/cli/system.md)、[发行协议](../../../docs/distribution.md)及[启动器](../../../runtime/launcher.md)。
 
 模拟正例：用户要求升级，预览无冲突，安装后版本和入口均核实。反例：看到 available=true 就安装。边界例：只有“查一下新版”或查询失败，保留当前版本；中断恢复完成不发起下一次升级。通过隔离正常、冲突、坏定义、中断与并发编辑场景验证；程序证据和 Agent 走查分别记录。
+
+Core 是唯一更新源。旧实例 core.branch=main 仍保留精确原始 SHA，个人 main 不整体合并 core-main。schema 5 源码模板只有在核实同版本正式发行确为原 Core SHA 的后继后，才允许转为正式发行；旧正式凭据仍拒绝同版本换源。

@@ -1,3 +1,5 @@
+import {configuration} from './configuration.js';
+import {repositoryExports, projectedPath} from './repository-exports.js';
 import {platform} from '../platform/index.js';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -56,6 +58,18 @@ export async function prepareContribution({ root, paths, all = false, title, bod
       continue;
     }
     destinations.set(sourcePath, change); changes.push(change);
+    const exportPath = repositoryExports[path];
+    if (exportPath) {
+      const base = await manifest.readSource(exportPath), before = base?.bytes ?? null;
+      if (bytes === null ? before !== null : before === null || !bytes.equals(before) || mode !== base.mode) {
+        const projected = { ...change, source_path: exportPath,
+          operation: bytes === null ? 'delete' : before === null ? 'add' : 'update',
+          before_sha256: before === null ? null : sha256(before), before_mode: base?.mode ?? null,
+          diff: publicDiff(exportPath, before, bytes, base?.mode ?? null, mode) };
+        if (destinations.has(exportPath)) fail('CONTRIBUTION_MAPPING_CONFLICT', `Duplicate repository export: ${exportPath}.`);
+        destinations.set(exportPath, projected); changes.push(projected);
+      }
+    }
   }
   if (committedSource(root).headCommit !== source.sourceCommit) fail('CONTRIBUTION_STALE', 'HEAD changed during preparation; prepare again.');
   if (!changes.length) fail('CONTRIBUTION_EMPTY', 'HEAD has no selected system changes relative to its original Core baseline.', {
@@ -63,7 +77,7 @@ export async function prepareContribution({ root, paths, all = false, title, bod
   });
   const publicPRBody = contributionPRBody(prDescription, manifest.version, manifest.core.revision);
   requirePRDescription(title, publicPRBody);
-  const plan = { schema_version: 4, id: randomUUID(), created_at: new Date().toISOString(), sourceCommit: source.sourceCommit,
+  const plan = { schema_version: 5, target: { repository: manifest.core.repository, branch: configuration(root).core_branch }, id: randomUUID(), created_at: new Date().toISOString(), sourceCommit: source.sourceCommit,
     baseline, core: manifest.core, version: manifest.version, title, body, commitMessage, prDescription, prBody: publicPRBody, changes };
   const digest = digestObject(plan), directory = `.agents/runtime-data/contributions/${plan.id}`;
   const warnings = await previousContributionWarnings(root, plan, api, fetcher);
@@ -76,19 +90,20 @@ export async function prepareContribution({ root, paths, all = false, title, bod
 export function readContribution({ root, id }) {
   if (typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id)) fail('CONTRIBUTION_INVALID', 'Invalid contribution ID.');
   const stored = readJSON(root, `.agents/runtime-data/contributions/${id}/plan.json`), { digest, ...plan } = stored;
-  if (!isSHA(digest) || digestObject(plan) !== digest || ![1, 2, 3, 4].includes(plan.schema_version) || plan.id !== id ||
+  if (!isSHA(digest) || digestObject(plan) !== digest || ![1, 2, 3, 4, 5].includes(plan.schema_version) || plan.id !== id ||
       !isRepository(plan.core?.repository) || !isBranch(plan.core?.branch) || !isRevision(plan.core?.revision) ||
       !Array.isArray(plan.changes) || !plan.changes.length) fail('CONTRIBUTION_TAMPERED', 'The prepared contribution changed; prepare and review it again.');
+  if (plan.schema_version === 5 && (!isRepository(plan.target?.repository) || plan.target.repository !== plan.core.repository || !isBranch(plan.target?.branch))) fail('CONTRIBUTION_INVALID', 'Invalid frozen upstream target.');
   if (plan.schema_version >= 2 && (!isLocalCommit(plan.sourceCommit) || !isSHA(plan.baseline?.manifest_sha256) ||
-      ![2, 3, 4].includes(plan.baseline?.schema_version))) fail('CONTRIBUTION_INVALID', 'Invalid committed contribution source or baseline.');
+      ![2, 3, 4, 5].includes(plan.baseline?.schema_version))) fail('CONTRIBUTION_INVALID', 'Invalid committed contribution source or baseline.');
   if (plan.schema_version >= 3 && (typeof plan.commitMessage !== 'string' || !checkCommitMessage(plan.commitMessage).valid ||
       plan.commitMessage !== contributionCommitMessage(plan.title, plan.body))) fail('CONTRIBUTION_INVALID', 'Invalid frozen commit message.');
-  if (plan.schema_version === 4 && (!checkPRDescription(plan.title, plan.prDescription).valid ||
+  if (plan.schema_version >= 4 && (!checkPRDescription(plan.title, plan.prDescription).valid ||
       !checkPRDescription(plan.title, plan.prBody).valid ||
       plan.prBody !== contributionPRBody(plan.prDescription, plan.version, plan.core.revision))) fail('CONTRIBUTION_INVALID', 'Invalid frozen PR description or provenance.');
   const destinations = new Set();
   for (const change of plan.changes) {
-    if (!change || !eligible(change.workspace_path) || !eligible(change.source_path) || ![0o644, 0o755].includes(change.mode) ||
+    if (!change || !eligible(change.workspace_path) || !(eligible(change.source_path) || (plan.schema_version === 5 && projectedPath(change.workspace_path, change.source_path))) || ![0o644, 0o755].includes(change.mode) ||
         destinations.has(change.source_path) || !['add', 'update', 'delete'].includes(change.operation) ||
         !(change.before_sha256 === null || isSHA(change.before_sha256)) ||
         (plan.schema_version >= 2 && ![null, 0o644, 0o755].includes(change.before_mode)) ||
@@ -146,9 +161,9 @@ function verifyLocalSource(root, plan, published) {
     // Compact receipts bind the immutable Core identity. The frozen preimage is
     // checked against that remote Core before any write, including for dry-run
     // plans whose local verification must not need a network request.
-    if (manifest.schema_version === 4) {
+    if ([4, 5].includes(manifest.schema_version) || plan.schema_version === 5) {
       if ((file ? sha256(file.bytes) : null) !== change.after_sha256 || (file?.mode ?? null) !== change.workspace_mode ||
-          change.source_path !== change.workspace_path || change.mode !== (file?.mode ?? change.before_mode ?? 0o644) ||
+          (change.source_path !== change.workspace_path && !projectedPath(change.workspace_path, change.source_path)) || change.mode !== (file?.mode ?? change.before_mode ?? 0o644) ||
           change.operation !== (!file ? 'delete' : change.before_sha256 === null ? 'add' : 'update')) {
         fail('CONTRIBUTION_STALE', 'The prepared content does not match the recorded local commit.');
       }
@@ -173,8 +188,8 @@ async function verifyLegacyTree(github, repository, treeSHA, entries, changes) {
   }
 }
 export async function submitContribution({ root, id, reviewed, dryRun = false, api, reconcileOnly = false }) {
-  const plan = readContribution({ root, id }), legacy = plan.schema_version < 4;
-  const targetBranch = plan.core.branch;
+  const plan = readContribution({ root, id }), legacy = plan.schema_version < 5;
+  const targetBranch = plan.target?.branch ?? plan.core.branch;
   if (reviewed !== plan.digest) fail('CONTRIBUTION_REVIEW_REQUIRED', 'Supply the digest of the contribution preview using --reviewed.');
   const statePath = `.agents/runtime-data/contributions/${id}/submitted.json`;
   const previous = readJSON(root, statePath, true);

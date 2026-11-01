@@ -1,3 +1,5 @@
+import {storedZip} from './helpers/platform.js';
+import {buildManifest} from '../src/services/build-manifest.js';
 import {launcherInvocation,platform as nativePlatform} from '../src/platform/index.js';
 import {fileMode} from '../src/distribution/files.js';
 import {fixtureTarget} from './helpers/distribution-fixture.js';
@@ -59,13 +61,15 @@ test('complete release includes the system and empty user skeleton, excluding pr
   for (const path of ['USER.md', 'BOT.md', 'MEMORY.md']) writeAtomic(join(f.root, path), 'FICTIONAL_PRIVATE_SENTINEL ' + path);
   const result = await buildRelease({ root: f.root, output: join(f.directory, 'another-build') });
   const loaded = inspectReleaseDirectory(f.root, result.output);
-  const entries = loaded.workspaces[0].entries;
-  assert.equal(result.template, join(result.output, 'ksf-workspace'));
-  assert.deepEqual(result.products, { core: 'ksf-core', workspace: 'ksf-workspace', instance: 'ksf' });
-  assert.equal(result.index.platforms[fixtureTarget].workspace.name, `ksf-workspace-0.1.0-${fixtureTarget}.tar.gz`);
-  assert.deepEqual(readdirSync(result.output).sort(), ['ksf-workspace', `ksf-core-0.1.0-${fixtureTarget}.tar.gz`, `ksf-workspace-0.1.0-${fixtureTarget}.tar.gz`, 'ksf-core-release.json'].sort());
-  const provenance = JSON.parse(entries.get('.ksf-template.json').bytes);
-  assert.equal(provenance.product, 'ksf-workspace'); assert.equal(provenance.instance_default_name, 'ksf');
+  const entries = new Map();
+  const collect = directory => readdirSync(join(result.instance, directory), { withFileTypes: true }).forEach(item => { const path = directory ? `${directory}/${item.name}` : item.name; if (item.isDirectory()) collect(path); else entries.set(path, { bytes: readFileSync(join(result.instance, path)), mode: fileMode(join(result.instance, path)) }); });
+  collect('');
+  assert.equal(loaded.artifacts.length, 3);
+  assert.equal(result.template, join(result.output, 'ksf'));
+  assert.deepEqual(result.products, { core: 'ksf-core', instance: 'ksf' });
+  assert.equal(result.index.schema_version, 2);
+  assert.equal(result.index.platforms[fixtureTarget].workspace, undefined);
+  assert.deepEqual(readdirSync(result.output).sort(), ['ksf', `ksf-core-0.1.0-${fixtureTarget}.tar.gz`, 'ksf-core-index.json', 'ksf-core-release.json'].sort());
   assert.ok(entries.has('知识/.gitkeep'));
   for (const path of [...workspaceDocuments, '档案/个人/.gitkeep', '档案/企业/.gitkeep', '档案/项目/.gitkeep']) assert.ok(entries.has(path), path);
   assert.equal(existsSync(join(result.template, '归档')), false);
@@ -107,10 +111,10 @@ test('a custom-named user instance starts and upgrades independently of its temp
 test('publication requires the exact system, template and instance product identities', async t => {
   const f = await distributionFixture(t), index = structuredClone(f.first.index);
   index.products.workspace = 'ksf';
-  writeFileSync(join(f.first.output, 'ksf-core-release.json'), stableJSON(index));
+  writeFileSync(join(f.first.output, 'ksf-core-index.json'), stableJSON(index));
   assert.throws(() => inspectReleaseDirectory(f.root, f.first.output), { code: 'RELEASE_INVALID' });
   delete index.products;
-  writeFileSync(join(f.first.output, 'ksf-core-release.json'), stableJSON(index));
+  writeFileSync(join(f.first.output, 'ksf-core-index.json'), stableJSON(index));
   assert.throws(() => inspectReleaseDirectory(f.root, f.first.output), { code: 'RELEASE_INVALID' });
 });
 test('a copied no-Git workspace starts through its fixed launcher from another cwd without global Node', async t => {
@@ -129,29 +133,14 @@ test('a copied no-Git workspace starts through its fixed launcher from another c
   for (const path of ['USER.md', 'BOT.md', 'MEMORY.md']) assert.equal(existsSync(join(f.root, path)), false);
 });
 
-test('release validation accepts only the empty legacy originals placeholder and rejects unrelated extras', async t => {
-  const f = await distributionFixture(t);
-  const descriptor = f.first.index.platforms[fixtureTarget].workspace;
-  const archivePath = join(f.first.output, descriptor.name);
-  const original = [...readArchive(readFileSync(archivePath)).values()];
-  const cases = [
-    { path: '源档/.gitkeep', bytes: Buffer.alloc(0), mode: 0o644, accepted: true },
-    { path: '归档/.gitkeep', bytes: Buffer.alloc(0), mode: 0o644, accepted: true },
-    { path: '归档/.gitkeep', bytes: Buffer.from('private archive'), mode: 0o644 },
-    { path: '归档/.gitkeep', bytes: Buffer.alloc(0), mode: 0o755 },
-    { path: '源档/.gitkeep', bytes: Buffer.from('private original'), mode: 0o644 },
-    { path: '源档/.gitkeep', bytes: Buffer.alloc(0), mode: 0o755 },
-    { path: '源档/会议.md', bytes: Buffer.from('private original'), mode: 0o644 },
-    { path: '未知目录/.gitkeep', bytes: Buffer.alloc(0), mode: 0o644 },
-  ];
-  for (const { accepted = false, ...extra } of cases) {
-    const bytes = createArchive([...original, extra]);
-    writeFileSync(archivePath, bytes);
-    descriptor.size = bytes.length; descriptor.sha256 = sha256(bytes);
-    writeFileSync(join(f.first.output, 'ksf-core-release.json'), stableJSON(f.first.index));
-    if (accepted) assert.equal(inspectReleaseDirectory(f.root, f.first.output).workspaces[0].entries.get(extra.path).bytes.length, 0);
-    else assert.throws(() => inspectReleaseDirectory(f.root, f.first.output), { code: 'RELEASE_INVALID' }, extra.path);
-  }
+test('single-Core publication rejects a second product and legacy build indexes', async t => {
+  const f = await distributionFixture(t), index = structuredClone(f.first.index);
+  index.platforms[fixtureTarget].workspace = index.platforms[fixtureTarget].core;
+  writeFileSync(join(f.first.output, 'ksf-core-index.json'), stableJSON(index));
+  assert.throws(() => inspectReleaseDirectory(f.root, f.first.output), { code: 'RELEASE_INVALID' });
+  delete index.platforms[fixtureTarget].workspace; index.schema_version = 1;
+  writeFileSync(join(f.first.output, 'ksf-core-index.json'), stableJSON(index));
+  assert.throws(() => inspectReleaseDirectory(f.root, f.first.output), { code: 'RELEASE_INVALID' });
 });
 test('Core sources need no user directories while installed workspaces still validate their user scopes', async t => {
   const f = await distributionFixture(t);
@@ -159,7 +148,7 @@ test('Core sources need no user directories while installed workspaces still val
   const discovery = contextCapabilities(f.root);
   assert.equal(discovery.data.complete, true, JSON.stringify(discovery.errors));
   assert.deepEqual(objectQuery({ root: f.root, type: 'partner', operation: 'check', reference: 'partner.ksf.object-designer' }).errors, []);
-  assert.equal(installedManifest(f.workspace).core.branch, 'main');
+  assert.equal(installedManifest(f.workspace).core.branch, 'core-main');
   assert.equal(existsSync(join(f.root, '能力')), false);
   rmSync(join(f.workspace, '能力/协同'), { recursive: true });
   const incomplete = contextCapabilities(f.workspace);
@@ -209,79 +198,41 @@ for (const [command, args] of [
   ['release', ['build', '--json', '--json']], ['contribute', ['prepare']],
   ['contribute', ['prepare', '--all', '--paths', '.agents/core/test']], ['contribute', ['submit', 'id']],
   ['system', ['read', '--help', '--json']],
+  ['release', ['mirror']], ['release', ['template']], ['release', ['publish', 'out', '--release-only']],
 ]) {
   test(`strict CLI rejects ${command} ${args.join(' ')}`, () => {
     assert.throws(() => parseDistributionArgs(command, args), { code: 'INVALID_ARGUMENTS', exitCode: 2 });
   });
 }
 
+test('default release covers all declared platforms and publication refuses an incomplete feed',async t=>{
+  const f=await distributionFixture(t),other=fixtureTarget==='win32-x64'?'darwin-arm64':'win32-x64',version=f.build.runtime.version;
+  const archiveRoot=`node-v${version}-${other==='win32-x64'?'win-x64':'darwin-arm64'}`;
+  const archivePath=`.agents/core/runtime/packages/${archiveRoot}.${other==='win32-x64'?'zip':'tar.gz'}`;
+  const archive=other==='win32-x64'?storedZip([{path:`${archiveRoot}/node.exe`,bytes:Buffer.from('foreign runtime fixture; never executed')},{path:`${archiveRoot}/LICENSE`,bytes:Buffer.from('fixture license')}])
+    :createArchive([{path:`${archiveRoot}/bin/node`,bytes:Buffer.from('foreign runtime fixture; never executed'),mode:0o755},{path:`${archiveRoot}/LICENSE`,bytes:Buffer.from('fixture license'),mode:0o644}]);
+  f.save(archivePath,archive);f.build.runtime.packages[other]={archive_path:archivePath,archive_sha256:sha256(archive)};
+  f.save('.agents/core/build.json',stableJSON(f.build));await buildManifest(f.root);
+  git(f.root,['add','.agents']);git(f.root,['commit','-m','Fictional second platform']);
+  const output=join(f.directory,'all-platforms'),built=await buildRelease({root:f.root,output});
+  assert.deepEqual(built.platforms,['darwin-arm64','win32-x64']);
+  assert.deepEqual(Object.keys(built.index.platforms).sort(),built.platforms);
+  assert.equal(installedManifest(built.instance).platform,fixtureTarget);
+  assert.equal(inspectReleaseDirectory(f.root,output).artifacts.length,4);
+  const bridge=JSON.parse(readFileSync(join(output,'ksf-core-release.json')));
+  assert.equal(bridge.schema_version,1);
+  assert.deepEqual(bridge.products,{core:'ksf-core',workspace:'ksf-workspace',instance:'ksf'});
+  assert.equal(bridge.core_revision,built.coreRevision);assert.deepEqual(bridge.platforms,built.index.platforms);
+  assert.ok(Object.values(bridge.platforms).every(platform=>platform.workspace===undefined));
 
-test('verified legacy workspace layouts remain valid and generated documents must match their Core sources', async t => {
-  const f = await distributionFixture(t), index = structuredClone(f.first.index);
-  const platform = index.platforms[fixtureTarget];
-  const core = readArchive(readFileSync(join(f.first.output, platform.core.name)));
-  const workspace = readArchive(readFileSync(join(f.first.output, platform.workspace.name)));
-  const save = (descriptor, entries) => {
-    const bytes = createArchive([...entries.values()]);
-    writeFileSync(join(f.first.output, descriptor.name), bytes);
-    descriptor.size = bytes.length; descriptor.sha256 = sha256(bytes);
-    writeFileSync(join(f.first.output, 'ksf-core-release.json'), stableJSON(index));
-  };
-  // Rehashing an altered workspace cannot bypass its verified Core template sources.
-  for (const path of workspaceDocuments) {
-    const original = workspace.get(path);
-    for (const replacement of [null, { ...original, bytes: Buffer.from('unverified replacement') }, { ...original, mode: 0o755 }]) {
-      if (replacement) workspace.set(path, replacement); else workspace.delete(path);
-      save(platform.workspace, workspace);
-      assert.throws(() => inspectReleaseDirectory(f.root, f.first.output), { code: 'RELEASE_INVALID' }, path);
-    }
-    workspace.set(path, original);
-  }
-  const manifest = JSON.parse(core.get('.agents/core/release.json').bytes);
-  const removeDocuments = paths => {
-    for (const path of paths) {
-      const source = `.agents/core/distribution/template/${path}`;
-      core.delete(source); workspace.delete(source); delete manifest.files[source]; workspace.delete(path);
-    }
-    core.get('.agents/core/release.json').bytes = Buffer.from(stableJSON(manifest));
-    workspace.get('.agents/core/release.json').bytes = Buffer.from(stableJSON(releaseReceipt(manifest)));
-    save(platform.core, core); save(platform.workspace, workspace);
-  };
-  // A legacy MEMORY is accepted only when it exactly matches a verified Core source.
-  const memoryPath = 'MEMORY.md', memorySource = '.agents/core/distribution/template/MEMORY.md';
-  const memory = { path: memoryPath, bytes: Buffer.from('# Fictional legacy memory template\n'), mode: 0o644 };
-  workspace.set(memoryPath, memory);
-  save(platform.workspace, workspace);
-  assert.throws(() => inspectReleaseDirectory(f.root, f.first.output), { code: 'RELEASE_INVALID' });
-  const source = { ...memory, path: memorySource };
-  core.set(memorySource, source); workspace.set(memorySource, source);
-  manifest.files[memorySource] = { sha256: sha256(source.bytes), mode: source.mode, source_path: memorySource };
-  core.get('.agents/core/release.json').bytes = Buffer.from(stableJSON(manifest));
-  workspace.get('.agents/core/release.json').bytes = Buffer.from(stableJSON(releaseReceipt(manifest)));
-  save(platform.core, core); save(platform.workspace, workspace);
-  assert.equal(inspectReleaseDirectory(f.root, f.first.output).workspaces[0].entries.has(memoryPath), true);
-  for (const replacement of [null, { ...memory, bytes: Buffer.from('altered memory') }, { ...memory, mode: 0o755 }]) {
-    if (replacement) workspace.set(memoryPath, replacement); else workspace.delete(memoryPath);
-    save(platform.workspace, workspace);
-    assert.throws(() => inspectReleaseDirectory(f.root, f.first.output), { code: 'RELEASE_INVALID' });
-  }
-  workspace.set(memoryPath, memory);
-  removeDocuments([memoryPath]);
-  assert.equal(inspectReleaseDirectory(f.root, f.first.output).workspaces[0].entries.has(memoryPath), false);
-  // Old releases did not contain knowledge rules or cognition template sources.
-  removeDocuments(knowledgeFrameworkFiles);
-  assert.equal(inspectReleaseDirectory(f.root, f.first.output).workspaces[0].entries.has('知识/rules/README.md'), false);
-  // Previous knowledge/archive layout, before the collaboration templates.
-  removeDocuments(['USER.md', 'BOT.md']);
-  assert.equal(inspectReleaseDirectory(f.root, f.first.output).workspaces[0].entries.has('档案/archive.md'), true);
-  workspace.set('USER.md', { path: 'USER.md', bytes: Buffer.from('unexpected personal file'), mode: 0o644 });
-  save(platform.workspace, workspace);
-  assert.throws(() => inspectReleaseDirectory(f.root, f.first.output), { code: 'RELEASE_INVALID' });
-  workspace.delete('USER.md');
-  // Older layout without either knowledge/archive root document.
-  removeDocuments(['知识/knowledge.md', '档案/archive.md']);
-  for (const path of [...workspace.keys()]) if (path.startsWith('档案/')) workspace.delete(path);
-  for (const path of ['归档/.gitkeep', '源档/.gitkeep']) workspace.set(path, { path, bytes: Buffer.alloc(0), mode: 0o644 });
-  save(platform.workspace, workspace);
-  assert.equal(inspectReleaseDirectory(f.root, f.first.output).workspaces[0].entries.has('归档/.gitkeep'), true);
+  for(const target of built.platforms){const item=built.index.platforms[target].core;const archive=inspectCoreArchive(readFileSync(join(output,item.name)));assert.equal(archive.manifest.platform,target);assert.equal(archive.manifest.core.revision,built.coreRevision);assert.deepEqual(Object.keys(built.index.platforms[target]),['core']);}
+  const single=await buildRelease({root:f.root,platform:fixtureTarget,output:join(f.directory,'partial-platform')});
+  assert.throws(()=>inspectReleaseDirectory(f.root,single.output),{code:'RELEASE_PLATFORM_MISSING'});
+});
+
+test('a tampered compatibility index cannot publish a second or different product',async t=>{
+  const f=await distributionFixture(t),path=join(f.first.output,'ksf-core-release.json');
+  const bridge=JSON.parse(readFileSync(path));bridge.platforms[fixtureTarget].workspace=bridge.platforms[fixtureTarget].core;
+  writeFileSync(path,stableJSON(bridge));
+  assert.throws(()=>inspectReleaseDirectory(f.root,f.first.output),{code:'RELEASE_INVALID'});
 });

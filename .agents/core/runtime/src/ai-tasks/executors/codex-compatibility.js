@@ -5,5 +5,5 @@ import {platform} from '../../platform/index.js';
 export function supportedCodexVersion(value, platformName = platform.name) {
   const version = value.trim();
   return /^codex-cli 0\.163\.\d+$/.test(version) ||
-    platformName === 'win32' && version === 'codex-cli 0.165.0-alpha.1.2';
+    platformName === 'win32' && ['codex-cli 0.165.0-alpha.1.2', 'codex-cli 0.166.0-alpha.5.1'].includes(version);
 }

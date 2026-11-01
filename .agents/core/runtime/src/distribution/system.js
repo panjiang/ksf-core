@@ -1,3 +1,4 @@
+import {GitHubAPI} from './github.js';
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
   chmodSync } from 'node:fs';
@@ -40,7 +41,7 @@ export async function systemRead({ root, api, fetcher }) {
   const backups = backupRecords(root);
   if (!receipt) return { mode: 'development', installed: false, coreRepository: config.core_repository,
     releaseSource: config.release_source, automaticUpdates: false, backups: [] };
-  if (receipt.schema_version === 4 && receipt.development) return { mode: 'workspace', installed: true,
+  if ([4, 5].includes(receipt.schema_version) && receipt.development) return { mode: 'workspace', installed: true,
     version: receipt.version, platform: receipt.platform, core: receipt.core, developmentPackage: true,
     releaseSource: config.release_source, automaticUpdates: false, checkIntervalSeconds: config.check_interval_seconds,
     requestTimeoutSeconds: config.request_timeout_seconds, changes: null, baselineVerified: false,
@@ -60,11 +61,12 @@ export async function systemRead({ root, api, fetcher }) {
     automaticUpdates: false, checkIntervalSeconds: config.check_interval_seconds, requestTimeoutSeconds: config.request_timeout_seconds, changes, backups: backups.map(b => ({ id: b.id, from: b.from, to: b.to, operation: b.operation })) };
 }
 export function validateIndex(index, manifest) {
-  if (!index || index.schema_version !== 1 || !isRepository(index.core_repository) || !isRevision(index.core_revision) ||
+  if (!index || ![1, 2].includes(index.schema_version) || !isRepository(index.core_repository) || !isRevision(index.core_revision) ||
       index.core_repository !== manifest.core.repository || !index.platforms || Array.isArray(index.platforms)) fail('RELEASE_INVALID', 'Release index identity is invalid.');
   versionParts(index.version);
-  validateProducts(index.products);
+  validateProducts(index.products, { legacy: index.schema_version === 1 });
   if (index.development === true) fail('RELEASE_INVALID', 'Development packages cannot be installed from a release feed.');
+  if (index.schema_version === 2 && Object.values(index.platforms).some(items => Object.keys(items).some(key => key !== 'core'))) fail('RELEASE_INVALID', 'A single-Core index cannot contain a second product.');
   const selected = index.platforms[manifest.platform];
   if (!selected?.core) fail('PLATFORM_UNSUPPORTED', `Release has no Core package for ${manifest.platform}.`);
   for (const item of [selected.core, selected.workspace].filter(Boolean)) {
@@ -75,13 +77,28 @@ export function validateIndex(index, manifest) {
 function sourceAtRoot(root, source) {
   return source && !/^[A-Za-z][A-Za-z0-9+.-]*:/.test(source) ? resolve(root, source) : source;
 }
-export async function systemCheck({ root, source, fetcher }) {
+async function sourceReleaseState(current, incoming, { api, fetcher } = {}) {
+  const ordinary = { promotion: false, sourceAhead: false };
+  if (current.origin !== 'core-template' || incoming.version !== current.version) return ordinary;
+  if (current.core.revision === incoming.core_revision) return { promotion: true, sourceAhead: false };
+  const github = api ?? new GitHubAPI({ readOnly: true, fetcher });
+  const comparison = await github.request('GET', `/repos/${current.core.repository}/compare/${current.core.revision}...${incoming.core_revision}`);
+  if (comparison.base_commit?.sha !== current.core.revision) fail('RELEASE_REPLACED', 'The release comparison does not identify the verified template source.');
+  if (comparison.status === 'behind' && comparison.merge_base_commit?.sha === incoming.core_revision) return { promotion: false, sourceAhead: true };
+  if (comparison.merge_base_commit?.sha === current.core.revision && ['ahead', 'identical'].includes(comparison.status)) return { promotion: true, sourceAhead: false };
+  fail('RELEASE_REPLACED', 'The same-version release and verified template source are unrelated.');
+}
+export async function systemCheck({ root, source, fetcher, api }) {
   const current = installedManifest(root), config = configuration(root, { user: true });
   const resolvedSource = sourceAtRoot(root, source) ?? config.release_source;
   const { index, url } = await releaseIndex(resolvedSource, { timeout: config.request_timeout_seconds * 1000, fetcher });
-  const artifacts = validateIndex(index, current), comparison = compareVersions(index.version, current.version);
-  if (comparison === 0 && index.core_revision !== current.core.revision) fail('RELEASE_REPLACED', 'The installed version was republished with a different Core revision.');
-  return { current: current.version, latest: index.version, platform: current.platform, available: comparison > 0,
+  const nativePlatform = `${process.platform}-${process.arch}`;
+  const selectedPlatform = index.schema_version === 2 || index.platforms?.[nativePlatform]?.core ? nativePlatform : current.platform;
+  const artifacts = validateIndex(index, { ...current, platform: selectedPlatform }), comparison = compareVersions(index.version, current.version);
+  const platformSwitch = selectedPlatform !== current.platform && comparison === 0 && index.core_revision === current.core.revision;
+  const { promotion, sourceAhead } = await sourceReleaseState(current, index, { api, fetcher });
+  if (comparison === 0 && index.core_revision !== current.core.revision && !promotion && !sourceAhead) fail('RELEASE_REPLACED', 'The installed version was republished with a different Core revision.');
+  return { current: current.version, latest: index.version, platform: selectedPlatform, installedPlatform: current.platform, platformSwitch, available: comparison > 0 || promotion || platformSwitch, sourcePromotion: promotion, sourceAhead,
     source: resolvedSource, indexURL: url, index, artifacts };
 }
 export async function planUpdate(root, current, incoming, entries) {
@@ -232,15 +249,17 @@ export async function systemUpdate({ root, source, from, dryRun = false, fetcher
   if (from) {
     archive = (await download(sourceAtRoot(root, from), { timeout: config.request_timeout_seconds * 1000, fetcher })).bytes;
   } else {
-    check = await systemCheck({ root, source, fetcher });
+    check = await systemCheck({ root, source, fetcher, api });
     if (!check.available) return { current: current.version, latest: check.latest, changed: false, dryRun };
     archive = (await download(check.artifacts.core.url, { base: check.indexURL, timeout: config.request_timeout_seconds * 1000, fetcher })).bytes;
     if (archive.length !== check.artifacts.core.size || sha256(archive) !== check.artifacts.core.sha256) fail('CHECKSUM_MISMATCH', 'Downloaded Core archive does not match the Release index.');
   }
-  const { manifest: incoming, entries } = inspectCoreArchive(archive, { expectedPlatform: current.platform, expectedRepository: current.core.repository, expectedVersion: check?.latest });
+  const { manifest: incoming, entries } = inspectCoreArchive(archive, { expectedPlatform: check?.platform ?? `${process.platform}-${process.arch}`, expectedRepository: current.core.repository, expectedVersion: check?.latest });
   if (incoming.development) fail('RELEASE_INVALID', 'Cannot install a development package as an official update.');
   if (check && incoming.core.revision !== check.index.core_revision) fail('RELEASE_INVALID', 'Release source revision differs from the index.');
-  if (compareVersions(incoming.version, current.version) <= 0) fail('VERSION_NOT_NEWER', 'Updates require a newer version; use rollback to return to a previous installed version.');
+  const { promotion } = await sourceReleaseState(current, { version: incoming.version, core_revision: incoming.core.revision }, { api, fetcher });
+  const platformSwitch = incoming.platform !== current.platform && incoming.core.revision === current.core.revision && incoming.version === current.version;
+  if (compareVersions(incoming.version, current.version) <= 0 && !promotion && !platformSwitch) fail('VERSION_NOT_NEWER', 'Updates require a newer version; use rollback to return to a previous installed version.');
   current = await resolveBaseline(receipt, { api, fetcher });
   const plan = await planUpdate(root, current, incoming, entries);
   const result = { current: current.version, latest: incoming.version, dryRun, changed: false, changes: plan.changes, conflicts: plan.conflicts };

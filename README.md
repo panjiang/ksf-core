@@ -8,7 +8,7 @@
 
 *产品能力概览（示意）。下方提供真实界面与完整上手步骤。*
 
-[创建自己的 KSF](https://github.com/yinbaiyuan/ksf-workspace) · [开始使用](#从模板开始使用) · [看团队场景](#用-ksf-完成你的工作) · [使用手册](.agents/core/docs/README.md)
+[创建自己的 KSF](https://github.com/yinbaiyuan/ksf-core) · [开始使用](#从模板开始使用) · [看团队场景](#用-ksf-完成你的工作) · [使用手册](.agents/core/docs/README.md)
 
 KSF 是面向个人与团队的 AI 工作框架，**既是知识库框架，也是工作流框架**。它把背景资料、专业方法、AI 搭档、应用和协作流程组织在同一个工作空间。你继续用 Codex、WorkBuddy 等 Agent 客户端工作；KSF 为任务组织可读取的背景、可采用的方法，以及可运行的工具。
 
@@ -60,11 +60,11 @@ KSF 是 **Knowledge · Skills · Flywheel（知识、技能、飞轮）** 的缩
 
 从一项真实任务开始，再开一轮对话继续它，就能检查 KSF 是否接住了你的工作。
 
-需要 GitHub 账户、本机 Git，以及已安装并登录的 Codex、WorkBuddy 等支持本地文件与终端工具的 Agent 客户端。当前 `main` 模板面向 **macOS ARM64**；其他平台以 [Releases](https://github.com/yinbaiyuan/ksf-core/releases) 实际提供的匹配包为准。
+需要 GitHub 账户、本机 Git，以及已安装并登录的 Codex、WorkBuddy 等支持本地文件与终端工具的 Agent 客户端。官方模板使用 `core-main`，个人实例初始化后使用 `main`；支持 **macOS ARM64** 与 **Windows x64**，发行包按本机平台从 [Releases](https://github.com/yinbaiyuan/ksf-core/releases) 选择。
 
-### 1. 从 ksf-workspace 创建自己的仓库
+### 1. 从 ksf-core 创建自己的仓库
 
-打开 [ksf-workspace](https://github.com/yinbaiyuan/ksf-workspace)，点击 **Use this template → Create a new repository**，选择自己的账户，仓库名可填 `ksf`，可见性选择 **Private**，然后创建。这个仓库保存你自己的知识、项目与能力。
+打开 [ksf-core](https://github.com/yinbaiyuan/ksf-core)，点击 **Use this template → Create a new repository**，仅复制默认分支，选择自己的账户，仓库名可填 `ksf`，可见性选择 **Private**，然后创建。这个仓库保存你自己的知识、项目与能力。
 
 ### 2. 克隆到本地
 
@@ -77,7 +77,7 @@ cd ksf
 
 私有仓库需要 GitHub 访问授权，也可以在 GitHub Desktop 登录后克隆。
 
-也可直接[下载工作区](https://github.com/yinbaiyuan/ksf-core/releases)：解压 `ksf-workspace-<版本>-<平台>.tar.gz` 即可按文件夹使用。完整包自带运行时，普通使用无需另装 Node.js、Python 或 npm；文件夹方式无需 Git。
+也可直接[下载工作区](https://github.com/yinbaiyuan/ksf-core/releases)：先核对版本索引的 SHA256 与尺寸，再将 `ksf-core-<版本>-<平台>.tar.gz` 解到空目录。完整包自带运行时，普通使用无需另装 Node.js、Python 或 npm；文件夹方式无需 Git。
 
 ### 3. 用 Codex 或 WorkBuddy 打开根目录
 
@@ -90,7 +90,9 @@ cd ksf
 
 按客户端提示允许所需的本地文件与命令操作。目录选择方式可参考 [Codex 本地执行说明](https://learn.chatgpt.com/docs/environments/modes)和 [WorkBuddy 工作空间说明](https://www.workbuddy.cn/docs/workbuddy/From-Beginner-to-Expert-Guide/Function-Description/Task-Bar)。执行任务所用的模型、工具与权限由客户端及已配置服务提供。
 
-### 4. 完成首次孵化，打开工作台
+### 4. 初始化来源，完成首次孵化并打开工作台
+
+Agent 会先执行固定入口的 `instance init --json`，校验准确 Core 来源、补齐缺少的用户文件，并将本地个人分支改为 `main`。它保留已有个人内容，不提交、推送或更换 origin。成功后重新取 `context entry --json` 才进入孵化。
 
 Agent 会引导确认四项：**你的称呼、实例名称、局域网本机名、登录后启动后台**。实例名称也是协作伙伴的默认名字，可以一次回答：
 
@@ -106,7 +108,7 @@ macOS：
 ./.agents/ksf open --json
 ```
 
-Windows PowerShell（取得匹配的 Windows 工作区包后）：
+Windows PowerShell：
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .agents/ksf.ps1 open --json
@@ -192,13 +194,10 @@ KSF 用“立”字概括支撑这套协作的五个部分：
 - [应用开发手册](.agents/core/docs/app-development/README.md) · [应用打包与分发](.agents/core/docs/app-development/release.md)
 - [完整使用手册](.agents/core/docs/README.md) · [问题反馈](https://github.com/yinbaiyuan/ksf-core/issues) · [系统贡献流程](.agents/core/docs/cli/contribute.md)
 
-`ksf-core` 维护系统、程序、内置应用、基础能力和文档。[ksf-workspace](https://github.com/yinbaiyuan/ksf-workspace) 是由 Core 生成的用户模板；从模板建立的个人实例保存自己的知识、项目、能力与档案，系统升级保留这些用户内容。
+`ksf-core` 维护系统、程序、内置应用、基础能力和文档。[ksf-core](https://github.com/yinbaiyuan/ksf-core) 是由 Core 生成的用户模板；从模板建立的个人实例保存自己的知识、项目、能力与档案，系统升级保留这些用户内容。
 
-## 参与 Core 开发
+## 官方主线与个人实例
 
-源码、用户实例和生成模板分别管理；工程边界见 [Git 协作规则](.agents/core/docs/git.md)。本地、CI 与发行遵循[统一测试规范](.agents/core/docs/testing.md)，默认 `ksf test` 执行快速验证，全量显式使用 `--suite full`；精确参数见 [test 命令](.agents/core/docs/cli/test.md)。
+Core 是唯一源码、模板和发行入口，官方默认分支为 `core-main`，只保存公共系统内容。个人从 Core 模板创建私有仓库，首次执行 `.agents/ksf instance init --json` 验证原始 Core 提交，补齐个人文件并将本地分支改为 `main`；随后再次执行 `context entry --json` 进入孵化。Windows 使用固定 PowerShell 入口。
 
-```sh
-.agents/ksf test --suite quick
-.agents/ksf test --changed --plan --json
-```
+个人历史独立；升级按精确 Core SHA 和 Release 执行，系统贡献提取选定公开差异，向 `core-main` 发 PR。分支名不替代版本号与不可变提交。完整协议见[发行与实例](.agents/core/docs/distribution.md)。

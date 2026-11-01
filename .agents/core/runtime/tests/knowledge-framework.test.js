@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { distributionFixture } from './helpers/distribution-fixture.js';
+import { distributionFixture, instanceEntries } from './helpers/distribution-fixture.js';
 import { knowledgeFrameworkFiles } from '../src/distribution/release.js';
 import { inspectReleaseDirectory } from '../src/distribution/publish.js';
 import { systemUpdate, systemRollback } from '../src/distribution/system.js';
@@ -11,7 +11,7 @@ import { checkKnowledge } from '../src/services/knowledge-organize.js';
 
 test('a shipped workspace has reachable optional rules and empty cognition paths, without real knowledge or user records', async t => {
   const f = await distributionFixture(t);
-  const entries = inspectReleaseDirectory(f.root, f.first.output).workspaces[0].entries;
+  const entries = instanceEntries(f.first.instance);
   for (const path of knowledgeFrameworkFiles) {
     assert.deepEqual(entries.get(path).bytes, entries.get(`.agents/core/distribution/template/${path}`).bytes, path);
     assert.equal(entries.get(path).mode, 0o644);

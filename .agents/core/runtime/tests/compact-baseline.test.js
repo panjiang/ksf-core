@@ -48,7 +48,7 @@ test('new templates contain only a small receipt; update archives retain checksu
   assert.equal(receipt.schema_version, 4); assert.equal(receipt.files, undefined);
   assert.ok(readFileSync(join(f.workspace, '.agents/core/release.json')).length < 1024);
   const loaded = inspectReleaseDirectory(f.root, f.first.output);
-  assert.equal(loaded.workspaces.length, 1);
+  assert.equal(loaded.artifacts.length, 3);
   const core = inspectCoreArchive(readFileSync(join(f.first.output, f.first.index.platforms[fixtureTarget].core.name)));
   assert.ok(Object.values(core.manifest.files).every(record => record.baseline === undefined));
   assert.deepEqual(receipt, releaseReceipt(core.manifest));

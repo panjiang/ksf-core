@@ -1,11 +1,23 @@
 # Preserve managed-system text and binary bytes when checked out on Windows.
-AGENTS.md text eol=lf
-README.md text eol=lf
-.gitignore text eol=lf
 .gitattributes text eol=lf
-.github/** text eol=lf
+.gitignore text eol=lf
+README.md text eol=lf
+.github/** text=auto eol=lf
+AGENTS.md text eol=lf
 .agents/ksf text eol=lf
 .agents/ksf.ps1 text eol=lf
 .agents/core/** text=auto eol=lf
 .agents/core/runtime/packages/** -text
 .agents/user-data/*.json text eol=lf
+.agents/user-data/**/*.json text eol=lf
+
+# Markdown 行末两个空格表示硬换行；正文仍检查其他空白问题。
+项目/**/*.md whitespace=-blank-at-eol
+知识/**/*.md whitespace=-blank-at-eol
+
+# 验收原件保留 Windows 换行、工具空行及原始字节，避免改写证据。
+项目/**/资料/验收/** -text -whitespace
+项目/**/任务/*-验收/** -text -whitespace
+项目/**/任务/*-交付文件/** -text -whitespace
+项目/**/*.log -text -whitespace
+项目/**/*.tap -text -whitespace

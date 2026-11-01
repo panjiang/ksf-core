@@ -43,7 +43,7 @@ test('HEAD includes cumulative committed fixes even when the latest commit conta
   writeAtomic(join(f.workspace, '知识/private.md'), 'FICTIONAL_PRIVATE_FILE');
   const head = commitWorkspace(f, { paths: ['知识/private.md'], message: 'FICTIONAL_PRIVATE_MESSAGE' });
   const plan = await prepareContribution({ ...contributionDescription, root: f.workspace, all: true });
-  assert.equal(plan.schema_version, 4); assert.equal(plan.sourceCommit, head);
+  assert.equal(plan.schema_version, 5); assert.equal(plan.sourceCommit, head);
   assert.deepEqual(plan.changes.map(c => c.workspace_path), [example, path].sort());
   assert.ok(!JSON.stringify(plan).includes('FICTIONAL_PRIVATE_'));
   assert.equal(readContribution({ root: f.workspace, id: plan.id }).digest, plan.digest);

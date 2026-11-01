@@ -1,9 +1,9 @@
 name: Verify Core
 on:
   push:
-    branches: [main]
+    branches: [core-main]
   pull_request:
-    branches: [main]
+    branches: [core-main]
   workflow_dispatch:
     inputs:
       full:
@@ -18,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   plan:
+    if: github.repository == 'yinbaiyuan/ksf-core'
     runs-on: macos-15
     outputs:
       full: ${{ steps.plan.outputs.full }}
@@ -43,7 +44,7 @@ jobs:
     with:
       full: ${{ needs.plan.outputs.full == 'true' }}
   required:
-    if: always()
+    if: always() && github.repository == 'yinbaiyuan/ksf-core'
     needs: [plan, verification]
     runs-on: macos-15
     steps:
