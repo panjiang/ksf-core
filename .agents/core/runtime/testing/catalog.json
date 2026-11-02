@@ -7137,9 +7137,44 @@
       "requirements": [],
       "cacheable": false,
       "seconds": {
-        "darwin": 75,
-        "win32": 160,
+        "darwin": 30,
+        "win32": 110,
         "linux": 20
+      }
+    },
+    {
+      "id": "core:runtime-bundle-native",
+      "path": ".agents/core/runtime/tests/runtime-bundle-native.test.js",
+      "owner": "core",
+      "covers": [
+        "core"
+      ],
+      "suite": "full",
+      "platforms": [
+        "darwin",
+        "win32",
+        "linux"
+      ],
+      "timeoutMs": 600000,
+      "isolation": "exclusive",
+      "inputs": [
+        ".agents/core/runtime/src/distribution",
+        ".agents/core/runtime/src/services/build-manifest.js",
+        ".agents/core/runtime/src/platform",
+        ".agents/core/distribution/runtime-layout.json",
+        ".agents/core/runtime/tests/helpers",
+        ".agents/core/runtime/bootstrap.sh",
+        ".agents/core/runtime/bootstrap.ps1",
+        ".agents/core/runtime/tools/bootstrap-config.py",
+        ".agents/ksf",
+        ".agents/ksf.ps1"
+      ],
+      "requirements": [],
+      "cacheable": false,
+      "seconds": {
+        "darwin": 75,
+        "win32": 240,
+        "linux": 1
       }
     }
   ],
