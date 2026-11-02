@@ -81,7 +81,8 @@ test('compact baselines read the exact commit after main advances and fetch only
   const before = systemFingerprint(f.workspace), status = await systemRead({ root: f.workspace, api });
   assert.deepEqual(status.changes, []); assert.equal(systemFingerprint(f.workspace), before);
   assert.ok(api.calls.some(c => c.path.endsWith(`/git/commits/${original}`)));
-  assert.ok(!api.calls.some(c => c.path.includes('/git/blobs/')));
+  const declaration=git(f.root,['rev-parse',`${original}:.agents/core/build.json`]);
+  assert.deepEqual(api.calls.filter(c=>c.path.includes('/git/blobs/')).map(c=>c.path.split('/').at(-1)),[declaration]);
   const resolved = await resolveBaseline(installedManifest(f.workspace), { api });
   assert.equal((await resolved.read(example)).toString(), sample);
   assert.ok(api.calls.every(c => c.method === 'GET'));

@@ -14,7 +14,7 @@ function ownedFixture(root, files) {
   mkdirSync(join(base, 'testing'), { recursive: true });
   for (const path of ['tests', 'web/tests']) mkdirSync(join(base, path), { recursive: true });
   const components = {core:{directory:'.agents/core/runtime',testRoots:['.agents/core/runtime/tests']},web:{directory:'.agents/core/runtime/web',testRoots:['.agents/core/runtime/web/tests']}};
-  const tests = files.map(([path,code]) => {writeFileSync(join(base,path),code);const owner=path.startsWith('web/')?'web':'core';return {id:path,path:'.agents/core/runtime/'+path,owner,covers:[owner],suite:'quick',platforms:['darwin','win32'],cacheable:false,inputs:[],timeoutMs:10000,requirements:[],seconds:{darwin:1,win32:1}};});
+  const tests = files.map(([path,code]) => {writeFileSync(join(base,path),code);const owner=path.startsWith('web/')?'web':'core';return {id:path,path:'.agents/core/runtime/'+path,owner,covers:[owner],suite:'quick',platforms:['darwin','win32','linux'],cacheable:false,inputs:[],timeoutMs:10000,requirements:[],seconds:{darwin:1,win32:1}};});
   if (!tests.some(t=>t.owner==='web')) components.web.noTestsReason='Empty synthetic component';
   writeFileSync(join(base,'testing/catalog.json'),JSON.stringify({schemaVersion:1,components,risks:[],tests}));
   return join(base,'src/cli.js');

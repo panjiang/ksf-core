@@ -7,6 +7,8 @@ import { sha256 } from '../shared/hash.js';
 import { validateContributionManifest } from './manifests.js';
 import { GitHubAPI } from './github.js';
 import { download } from './network.js';
+import {runtimeLayoutPath,runtimeLayoutBytes,runtimePathForPlatform,assertCanonicalRuntimePackages} from '../platform/runtime-bundle.js';
+import {parseJSON} from './files.js';
 
 export const gitBlobID = bytes => createHash('sha1').update(Buffer.from(`blob ${bytes.length}\0`)).update(bytes).digest('hex');
 export const baselinePath = path => managedPath(path) || path === '.agents/bin/ksf';
@@ -35,22 +37,7 @@ export async function resolveBaseline(manifest, { api, fetcher } = {}) {
     tree = verified;
     return tree;
   }
-  if (!files) {
-    files = Object.create(null);
-    for (const [path, entry] of await originalTree()) {
-      if (entry.type === 'tree' || !baselinePath(path) || path === '.agents/core/manifest.yaml' || /\.tmp$/.test(path)) continue;
-      if (entry.type !== 'blob' || !['100644', '100755'].includes(entry.mode)) fail('BASELINE_UNVERIFIED', `Unsupported original system entry: ${path}.`);
-      files[path] = { source_path: path, mode: Number.parseInt(entry.mode, 8) & 0o777, git_blob: entry.sha };
-    }
-    for (const required of ['AGENTS.md', '.agents/core/build.json', '.agents/core/distribution.json']) {
-      if (!Object.hasOwn(files, required)) fail('BASELINE_UNVERIFIED', `Recorded Core source lacks ${required}.`);
-    }
-    if (!['.agents/ksf', '.agents/bin/ksf'].some(path => files[path]?.mode === 0o755)) fail('BASELINE_UNVERIFIED', 'Recorded Core source has no executable launcher.');
-  }
-  const read = async path => {
-    const record = files[path];
-    if (!record) return null;
-    if (record.baseline !== undefined) return Buffer.from(record.baseline, 'base64');
+  const readOriginal = async record => {
     const entry = (await originalTree()).get(record.source_path);
     if (!entry || entry.type !== 'blob' || !['100644', '100755'].includes(entry.mode) ||
         (Number.parseInt(entry.mode, 8) & 0o777) !== record.mode || (record.git_blob && record.git_blob !== entry.sha)) {
@@ -70,6 +57,40 @@ export async function resolveBaseline(manifest, { api, fetcher } = {}) {
     }
     if (gitBlobID(bytes) !== entry.sha || (record.sha256 && sha256(bytes) !== record.sha256)) fail('BASELINE_MISMATCH', `Original Core content differs: ${record.source_path}.`);
     return bytes;
+  };
+  if (!files) {
+    files = Object.create(null);
+    const original=await originalTree(),policy=original.get(runtimeLayoutPath);
+    // Schema 4 is an installed release; schema 5 is the untouched multi-target
+    // source template. Older commits without this policy keep their full tree.
+    const scoped=manifest.schema_version===4&&policy!==undefined;
+    let build;
+    if(scoped){
+      if(policy.type!=='blob'||policy.mode!=='100644'||policy.sha!==gitBlobID(runtimeLayoutBytes))fail('BASELINE_UNVERIFIED','Unknown original runtime bundle layout.');
+      // Read the declaration from the same immutable source as the tree, never
+      // from the installed (possibly edited) build.json or the Core version.
+      const bytes=await readOriginal({source_path:'.agents/core/build.json',mode:0o644});
+      try{build=parseJSON(bytes,'original build.json');assertCanonicalRuntimePackages(build);}
+      catch{fail('BASELINE_UNVERIFIED','Invalid original runtime package declaration.');}
+      const archive=build.runtime.packages[manifest.platform]?.archive_path;
+      if(!archive||original.get(archive)?.type!=='blob')fail('BASELINE_UNVERIFIED','Recorded Core source lacks the declared runtime archive.');
+    }
+    for (const [path, entry] of original) {
+      if (entry.type === 'tree' || !baselinePath(path) || path === '.agents/core/manifest.yaml' || /\.tmp$/.test(path)) continue;
+      if(scoped&&!runtimePathForPlatform(path,manifest.platform,build))continue;
+      if (entry.type !== 'blob' || !['100644', '100755'].includes(entry.mode)) fail('BASELINE_UNVERIFIED', `Unsupported original system entry: ${path}.`);
+      files[path] = { source_path: path, mode: Number.parseInt(entry.mode, 8) & 0o777, git_blob: entry.sha };
+    }
+    for (const required of ['AGENTS.md', '.agents/core/build.json', '.agents/core/distribution.json']) {
+      if (!Object.hasOwn(files, required)) fail('BASELINE_UNVERIFIED', `Recorded Core source lacks ${required}.`);
+    }
+    if (!['.agents/ksf', '.agents/bin/ksf'].some(path => files[path]?.mode === 0o755)) fail('BASELINE_UNVERIFIED', 'Recorded Core source has no executable launcher.');
+  }
+  const read = async path => {
+    const record = files[path];
+    if (!record) return null;
+    if (record.baseline !== undefined) return Buffer.from(record.baseline, 'base64');
+    return readOriginal(record);
   };
   const readSource = async path => {
     if (!Object.values(repositoryExports).includes(path)) fail('BASELINE_PATH_INVALID', 'Only explicit Core repository exports can be read.');

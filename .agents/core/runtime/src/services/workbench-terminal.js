@@ -1,4 +1,4 @@
-import {platform} from '../platform/index.js';
+import {platform,requirePlatformCapability} from '../platform/index.js';
 const nativePTY=()=>import('../../native/node-pty/lib/index.js').then(module=>module.default??module);
 import { realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -69,6 +69,7 @@ export function createWorkbenchTerminal(workspace,{loadPTY=nativePTY}={}) {
   const key=caller=>caller.runtimeId+':'+caller.instanceId;
   async function release(caller) {await Promise.all([...scopes].filter(([id])=>id.startsWith(caller.runtimeId+':')&&(!caller.instanceId||id===key(caller))).map(async([id,entry])=>{try{await (await entry).dispose();}finally{if(scopes.get(id)===entry)scopes.delete(id);}}));}
   const service=Object.fromEntries(methods.map(method=>[method,async(caller,input={})=>{
+    requirePlatformCapability('terminal');
     if(disposed)throw new Error('终端服务已关闭。');
     const id=key(caller);let entry=scopes.get(id);
     if(!entry){if(method!=='create'&&method!=='list')throw new Error('终端会话已结束，请新建会话。');entry=terminalScope(workspace,loadPTY);entry.caller={...caller};scopes.set(id,entry);entry.catch(()=>{if(scopes.get(id)===entry)scopes.delete(id);});}

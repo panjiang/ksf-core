@@ -22,9 +22,16 @@ ksf_recover() (
   ksf_lock="$ksf_system/recovery.lock"
   ksf_temporary=''
   ksf_guard_path "$ksf_lock"
-  [ -x /usr/bin/shlock ] || ksf_launcher_fail LOCK_UNAVAILABLE 'Recovery requires the native shlock utility.'
-  /usr/bin/shlock -f "$ksf_lock" -p "$$" || ksf_launcher_fail RECOVERY_BUSY 'Another recovery is running; retry after it finishes.'
-  trap 'rm -f "$ksf_lock"; [ -z "$ksf_temporary" ] || rm -f "$ksf_temporary"' EXIT
+  if [ "$(uname -s)" = Linux ]; then
+    [ -x /usr/bin/flock ] || ksf_launcher_fail LOCK_UNAVAILABLE 'Linux recovery requires flock.'
+    exec 9>"$ksf_lock"
+    /usr/bin/flock -n 9 || ksf_launcher_fail RECOVERY_BUSY 'Another recovery is running; retry after it finishes.'
+    trap 'exec 9>&-; [ -z "$ksf_temporary" ] || rm -f "$ksf_temporary"' EXIT
+  else
+    [ -x /usr/bin/shlock ] || ksf_launcher_fail LOCK_UNAVAILABLE 'Recovery requires the native shlock utility.'
+    /usr/bin/shlock -f "$ksf_lock" -p "$$" || ksf_launcher_fail RECOVERY_BUSY 'Another recovery is running; retry after it finishes.'
+    trap 'rm -f "$ksf_lock"; [ -z "$ksf_temporary" ] || rm -f "$ksf_temporary"' EXIT
+  fi
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
   [ -d "$ksf_transaction" ] || exit 0
@@ -35,7 +42,7 @@ ksf_recover() (
   case "$ksf_owner" in ''|*[!0-9]*) ksf_launcher_fail JOURNAL_INVALID 'Invalid transaction owner.' ;; esac
   [ "$ksf_owner" -gt 0 ] && [ -n "$ksf_owner_start" ] || ksf_launcher_fail JOURNAL_INVALID 'Missing transaction owner identity.'
   if kill -0 "$ksf_owner" 2>/dev/null; then
-    ksf_actual_start=$(/bin/ps -p "$ksf_owner" -o lstart= 2>/dev/null | /usr/bin/awk '{$1=$1; print}')
+    ksf_actual_start=$(LC_ALL=C /bin/ps -p "$ksf_owner" -o lstart= 2>/dev/null | /usr/bin/awk '{$1=$1; print}')
     [ "$ksf_actual_start" != "$ksf_owner_start" ] || ksf_launcher_fail UPDATE_BUSY 'A system update is running; retry after it finishes.'
   fi
   ksf_name=$(cat "$ksf_transaction/name" 2>/dev/null || true)

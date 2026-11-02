@@ -60,7 +60,7 @@ KSF 是 **Knowledge · Skills · Flywheel（知识、技能、飞轮）** 的缩
 
 从一项真实任务开始，再开一轮对话继续它，就能检查 KSF 是否接住了你的工作。
 
-需要 GitHub 账户、本机 Git，以及已安装并登录的 Codex、WorkBuddy 等支持本地文件与终端工具的 Agent 客户端。官方模板使用 `core-main`，个人实例初始化后使用 `main`；支持 **macOS ARM64** 与 **Windows x64**，发行包按本机平台从 [Releases](https://github.com/yinbaiyuan/ksf-core/releases) 选择。
+需要 GitHub 账户、本机 Git，以及已安装并登录的 Codex、WorkBuddy 等支持本地文件与终端工具的 Agent 客户端。官方模板使用 `core-main`，个人实例初始化后使用 `main`；支持 **macOS ARM64** 与 **Windows x64**，发行包按本机平台从 [Releases](https://github.com/yinbaiyuan/ksf-core/releases) 选择。 Linux x64/glibc（兼容 WSL2）已增加源码开发的核心 CLI、构建、测试与后台 HTTP 支持，限制和依赖见 [Linux 说明](.agents/core/docs/runtime/linux.md)；本轮没有正式 Linux 发行包。
 
 ### 1. 从 ksf-core 创建自己的仓库
 

@@ -52,15 +52,17 @@ knowledge and `.agents/runtime-data` are outside that system source boundary.
 
 The `build` command has a deliberate startup branch independent of its output:
 
-1. Native macOS `plutil` or Windows PowerShell reads the fixed runtime pins
+1. Native macOS `plutil`, Windows PowerShell, or Linux Python 3 reads the fixed runtime pins
    from `build.json` before Node.js is available.
 2. The entry verifies the archive's trusted SHA256 and required regular file
    entries, then derives the executable SHA256 itself.
 3. The existing installation mechanism prepares/reuses this exact Node.js and
    starts the JavaScript generator. A missing or malformed manifest is irrelevant
    to this command; ordinary commands still fail on malformed declarations.
-4. The generator strictly validates the entire build input and all declared
-   target archives. It recomputes package/member hashes and build metadata.
+4. The generator strictly validates the entire build input. Source and schema-5
+   template instances verify all declared archives. A target-platform release
+   verifies only its receipt-selected archive, so it can rebuild with no foreign
+   runtime files. It recomputes package/member hashes and build metadata.
 5. After checking that configuration, source and archives did not change during
    generation, it flushes a sibling temporary file and atomically renames it to
    `manifest.yaml` on the same filesystem. A failure leaves the previous manifest
@@ -68,7 +70,7 @@ The `build` command has a deliberate startup branch independent of its output:
 
 Different targets must use the same exact Node.js version. Fixed launchers support
 macOS and Windows and require the matching host archive in the build input.
-Current bundled targets are macOS ARM64 and Windows x64. The generator can also
+Source runtime targets are macOS ARM64, Windows x64, and Linux x64 (core development). The generator can also
 inspect a supplied macOS x64 archive. Foreign archives are checked for structure
 and hashes without executing their binaries; those checks do not certify native
 behavior on that platform. Native acceptance is recorded separately.
@@ -103,3 +105,7 @@ symlinked or altered outputs fail with WEB_BUILD_INVALID before manifest publica
 Frontend node_modules, .vite cache, coverage, test-results and .impeccable/review
 are excluded consistently from source hashing, managed paths and release walks.
 The Vite production manifest under dist/.vite remains a managed build artifact.
+
+## Target-platform release layout
+
+The source policy `distribution/runtime-layout.json` selects target-platform runtime bundles. The authored build.json is preserved byte-for-byte, while a release contains exactly its own Node archive and a generated manifest declaring that target only. An installed release uses its existing receipt when rebuilding; a source checkout or schema-5 template keeps all development targets. See [distribution and baseline compatibility](../docs/distribution.md#按目标平台携带运行时).

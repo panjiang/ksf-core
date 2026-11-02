@@ -1688,7 +1688,8 @@
       "suite": "full",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -1749,7 +1750,8 @@
       ],
       "suite": "full",
       "platforms": [
-        "darwin"
+        "darwin",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -1760,7 +1762,8 @@
         ".agents/ksf.ps1",
         ".gitignore",
         ".gitattributes",
-        "README.md"
+        "README.md",
+        ".agents/core/runtime/tools/bootstrap-config.py"
       ],
       "requirements": [],
       "timeoutMs": 600000,
@@ -1780,7 +1783,8 @@
       "suite": "full",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -1998,7 +2002,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -2036,7 +2041,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": true,
       "inputs": [
@@ -2074,7 +2080,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -2530,7 +2537,8 @@
       "suite": "full",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -2562,7 +2570,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -2600,7 +2609,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -3118,7 +3128,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -3614,7 +3625,8 @@
       "suite": "full",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -3784,7 +3796,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -4082,7 +4095,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -4350,7 +4364,8 @@
       "suite": "full",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -4478,7 +4493,8 @@
       "suite": "full",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -4656,7 +4672,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -4695,7 +4712,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -5499,7 +5517,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -5537,7 +5556,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -5683,7 +5703,8 @@
       "suite": "quick",
       "platforms": [
         "darwin",
-        "win32"
+        "win32",
+        "linux"
       ],
       "cacheable": false,
       "inputs": [
@@ -7027,6 +7048,59 @@
         "win32": 4
       },
       "timingBasis": "Conservative planning estimate for new local tests; Windows not yet measured."
+    },
+    {
+      "id": "core:linux",
+      "path": ".agents/core/runtime/tests/linux.test.js",
+      "owner": "core",
+      "covers": [
+        "core"
+      ],
+      "suite": "full",
+      "platforms": [
+        "linux"
+      ],
+      "timeoutMs": 60000,
+      "inputs": [
+        ".agents/ksf",
+        ".agents/core/runtime/bootstrap.sh",
+        ".agents/core/runtime/src",
+        ".agents/core/runtime/tools/bootstrap-config.py",
+        ".agents/core/runtime/testing/catalog.json"
+      ],
+      "requirements": [],
+      "cacheable": false,
+      "isolation": "exclusive"
+    },
+    {
+      "id": "core:runtime-bundle",
+      "path": ".agents/core/runtime/tests/runtime-bundle.test.js",
+      "owner": "core",
+      "covers": [
+        "core"
+      ],
+      "suite": "full",
+      "platforms": [
+        "darwin",
+        "win32",
+        "linux"
+      ],
+      "timeoutMs": 180000,
+      "isolation": "exclusive",
+      "inputs": [
+        ".agents/core/runtime/src/distribution",
+        ".agents/core/runtime/src/services/build-manifest.js",
+        ".agents/core/runtime/src/platform",
+        ".agents/core/distribution/runtime-layout.json",
+        ".agents/core/runtime/tests/helpers",
+        ".agents/core/runtime/bootstrap.sh",
+        ".agents/core/runtime/bootstrap.ps1",
+        ".agents/core/runtime/tools/bootstrap-config.py",
+        ".agents/ksf",
+        ".agents/ksf.ps1"
+      ],
+      "requirements": [],
+      "cacheable": false
     }
   ],
   "timingBaseline": {

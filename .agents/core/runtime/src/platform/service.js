@@ -3,6 +3,7 @@ import {homedir,userInfo} from 'node:os';
 import {join} from 'node:path';
 import {mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {powershell,encodedCommand} from './windows.js';
+import {platformCapabilities,requirePlatformCapability} from './index.js';
 
 export const SERVICE_LABEL='ai.ksf.core';
 const xml=v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -25,6 +26,7 @@ export function windowsLoginStartupJob(root,enabled){
   return guard+serviceJob(root,false);
 }
 export async function setLoginStartup(root,enabled){
+  if(!platformCapabilities.loginStartup){if(enabled)requirePlatformCapability('loginStartup');return;}
   if(process.platform==='darwin'){
     const path=launchAgentPath(),domain=`gui/${userInfo().uid}`;
     const loaded=run('/bin/launchctl',['print',`${domain}/${SERVICE_LABEL}`],{optional:true}).status===0;

@@ -53,7 +53,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.agents\ksf.ps1 launch
 | 文件或目录 | 约定 |
 | --- | --- |
 | protocol | 精确值 1；缺失或未知时保留材料并停止 |
-| owner、owner.start | 正整数 PID 和启动身份；macOS 为 ps lstart 规范化文本，Windows 为进程 StartTime 的 UTC ticks 十进制字符串 |
+| owner、owner.start | 正整数 PID 和启动身份；macOS/Linux 为 LC_ALL=C 的 ps lstart 规范化文本，Windows 为进程 StartTime 的 UTC ticks 十进制字符串 |
 | name | 以 ASCII 字母或数字起始，其余只含 ASCII 字母、数字、点、下划线或短横线的归档名 |
 | old-core、new-core | 旧系统与候选系统；整体目录交换 |
 | old-root、new-root | 有变化的 AGENTS.md、.agents/ksf、.agents/ksf.ps1 的完整前后快照；安装后保留 new-root |
@@ -62,7 +62,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.agents\ksf.ps1 launch
 
 未提交时，先核对所有带替换意图的根文件：等于旧快照则无需恢复，等于新快照则可以恢复；其他内容或缺失视为并发改动，报 RECOVERY_CONFLICT，保留当前文件与事务，人工核对后再恢复。准备阶段没有替换意图的根文件保持原样。恢复本身可重复执行。
 
-入口拒绝事务中的符号链接；Windows 同时拒绝 junction/reparse point。恢复使用独占锁：macOS shlock 回收死亡 owner，Windows FileStream FileShare.None 在进程退出时释放。锁不可用时返回错误供重试。活跃升级不会被恢复；未知协议不能猜测执行。事务归档到 system/failed 或 system/backups，已有同名归档不被覆盖。
+入口拒绝事务中的符号链接；Windows 同时拒绝 junction/reparse point。恢复使用独占锁：Linux flock 由文件描述符持有，锁文件保留且进程退出自动释放；macOS shlock 回收死亡 owner，Windows FileStream FileShare.None 在进程退出时释放。锁不可用时返回错误供重试。活跃升级不会被恢复；未知协议不能猜测执行。事务归档到 system/failed 或 system/backups，已有同名归档不被覆盖。
 
 这是本机进程中断恢复机制；未对断电时所有文件系统缓存的持久化或恶意并发目录替换作完整证明。
 
@@ -78,3 +78,5 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.agents\ksf.ps1 launch
 ## 系统级用户数据边界
 
 `.agents/user-data/` 由 Core 的 [user-data 服务](../docs/cli/user-data.md) 按注册格式管理，随用户实例保留。入口不创建默认设置、不读写它的业务字段，也不因增加命名空间而改变恢复协议。正常工作产生的数据继续放正常用户空间。
+
+Linux x64 与 WSL2 共用 POSIX 固定入口，独立恢复不依赖 Core、Node 或 Python。Linux 核心开发范围见 [Linux 平台说明](../docs/runtime/linux.md)。

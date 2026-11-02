@@ -7,10 +7,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { failure, parse, stringify } from './protocol.js';
 import { workbenchPermissions } from './permissions.js';
-import { platform } from '../platform/index.js';
+import { platform,requirePlatformCapability } from '../platform/index.js';
 
 export const codexHome = () => process.env.CODEX_HOME || join(homedir(), '.codex');
 export async function locateCLI() {
+  requirePlatformCapability('desktop');
   const candidates = [process.env.KSF_CODEX_DESKTOP_CLI, ...platform.desktopCandidates()].filter(Boolean);
   for (const file of candidates) { try { await access(file, constants.X_OK); return file; } catch {} }
   throw failure('CODEX_CLI_MISSING', '未找到 Codex Desktop 随包 CLI。');

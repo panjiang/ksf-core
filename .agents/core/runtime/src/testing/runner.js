@@ -55,7 +55,7 @@ export async function executeTestPlan(root, plan, { progress = line => process.s
     // Detached descendants have their own POSIX process groups. Snapshot the
     // owned tree before stopping its root; unrelated processes are excluded.
     const descendants=[];
-    if(process.platform==='darwin'){
+    if(['darwin','linux'].includes(process.platform)){
       const ps=spawnSync('/bin/ps',['-axo','pid=,ppid='],{encoding:'utf8',timeout:5000});
       const rows=(ps.stdout??'').trim().split('\n').map(line=>line.trim().split(/\s+/).map(Number));
       const collect=parent=>{for(const [pid,ppid]of rows)if(ppid===parent&&pid!==parent){collect(pid);descendants.push(pid);}};collect(child.pid);

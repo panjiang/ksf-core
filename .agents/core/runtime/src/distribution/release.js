@@ -17,6 +17,9 @@ import { committedSource } from './committed-source.js';
 import { gitBlobID, baselinePath } from './baseline.js';
 import { developmentPath } from './paths.js';
 import { gitExecutable } from '../platform/index.js';
+import { releaseTargets } from '../platform/catalog.js';
+import {runtimeLayoutPath,isPlatformRuntimeLayout,runtimePackagesPath,runtimePathForPlatform,assertCanonicalRuntimePackages} from '../platform/runtime-bundle.js';
+import YAML from '../vendor/yaml/dist/index.js';
 
 export const userDirectories = ['项目', '知识', ...Object.values(types).map(type => type.user), '@收件箱', '档案', '档案/个人', '档案/企业', '档案/项目', userDataRoot];
 // Explicit instance seed allowlist: never discover or package personal content.
@@ -44,6 +47,10 @@ function excluded(path) {
   return developmentPath(path) || path === '.agents/core/release.json' || /(?:^|\/)\.DS_Store$/.test(path) ||
     /^\.agents\/core\/\.manifest\.yaml\..*\.tmp$/.test(path);
 }
+function parseRuntimeManifest(bytes){
+  try{const runtime=YAML.parse(bytes.toString('utf8'))?.runtime;if(!runtime||typeof runtime!=='object')throw Error('Missing runtime');return runtime;}
+  catch{fail('RELEASE_INVALID','Invalid generated runtime manifest.');}
+}
 export function inspectCoreArchive(bytes, { expectedVersion, expectedPlatform, expectedRepository } = {}) {
   const entries = readArchive(bytes), metadata = entries.get('.agents/core/release.json');
   if (!metadata) fail('RELEASE_INVALID', 'Core archive has no release manifest.');
@@ -55,6 +62,19 @@ export function inspectCoreArchive(bytes, { expectedVersion, expectedPlatform, e
   for (const [path, record] of Object.entries(manifest.files)) {
     const file = entries.get(path);
     if (!file || file.mode !== record.mode || sha256(file.bytes) !== record.sha256) fail('RELEASE_INVALID', `Core file checksum or mode mismatch: ${path}.`);
+  }
+  const policy=entries.get(runtimeLayoutPath);
+  if(policy){
+    if(policy.mode!==0o644||!isPlatformRuntimeLayout(policy.bytes))fail('RELEASE_INVALID','Unknown runtime bundle layout.');
+    const build=parseJSON(entries.get('.agents/core/build.json').bytes,'build.json');
+    try{assertCanonicalRuntimePackages(build);}catch{fail('RELEASE_INVALID','Invalid runtime package declaration.');}
+    const selected=build.runtime.packages[manifest.platform];
+    const runtime=parseRuntimeManifest(entries.get('.agents/core/manifest.yaml').bytes);
+    const runtimePackage=runtime.packages?.[manifest.platform];
+    const archives=[...entries.keys()].filter(path=>path.startsWith(runtimePackagesPath));
+    if(!selected||archives.length!==1||!runtimePathForPlatform(archives[0],manifest.platform,build)||sha256(entries.get(archives[0]).bytes)!==selected.archive_sha256||
+      !runtimePackage||runtime.version!==build.runtime.version||Object.keys(runtime.packages??{}).join(',')!==manifest.platform||runtimePackage.archive_path!==selected.archive_path||runtimePackage.archive_sha256!==selected.archive_sha256)
+      fail('RELEASE_INVALID','A platform release must contain exactly its declared runtime archive and manifest.');
   }
   return { entries, manifest };
 }
@@ -69,6 +89,9 @@ async function buildPlatformRelease({ root, output, platform, allowDirty = false
     if (branch.status !== 0 || !stable) fail('RELEASE_BRANCH_INVALID', 'Official builds require the stable Core branch or its verified detached commit.');
   }
   const source = revisionInfo(root, allowDirty), paths = [...walkFiles(root, '.agents/core', { exclude: excluded }), ...launcherFiles].sort();
+  const policy=readRegular(root,runtimeLayoutPath,true),scoped=policy!==null;
+  if(scoped){if(!isPlatformRuntimeLayout(policy))fail('RELEASE_INVALID','Unknown runtime bundle layout.');assertCanonicalRuntimePackages(build);}
+  const bundledPaths=scoped?paths.filter(path=>runtimePathForPlatform(path,platform,build)):paths;
   const committed = source.dirty ? null : committedSource(root);
   const destination = resolve(root, output ?? `.agents/runtime-data/releases/${build.version}-${platform}`);
   const targetRoot = join(destination, products.instance);
@@ -84,7 +107,7 @@ async function buildPlatformRelease({ root, output, platform, allowDirty = false
       if (committed && path !== '.agents/core/manifest.yaml' && (!original || original.type !== 'blob' ||
           original.mode !== (mode === 0o755 ? '100755' : '100644') || gitBlobID(bytes) !== original.object)) source.dirty = true;
       sourceHashes.set(path, sha256(bytes));
-      writeAtomic(checkedPath(staging, path), bytes, mode);
+      if(!scoped||runtimePathForPlatform(path,platform,build))writeAtomic(checkedPath(staging, path), bytes, mode);
     }
     if (committed) {
       const expected = [...committed.entries.keys()].filter(path => baselinePath(path) && !excluded(path) && path !== '.agents/core/manifest.yaml').sort();
@@ -92,9 +115,9 @@ async function buildPlatformRelease({ root, output, platform, allowDirty = false
       if (expected.join('\n') !== actual.join('\n')) source.dirty = true;
       if (source.dirty && !allowDirty) fail('RELEASE_SOURCE_DIRTY', 'System files must exactly match the recorded Core commit; ignored or uncommitted files cannot enter an official release.');
     }
-    await buildManifest(staging, { sourceRoot: root, builtAt: source.builtAt });
+    await buildManifest(staging, { sourceRoot: root, builtAt: source.builtAt,...(scoped?{target:platform}:{}) });
     const inventory = {}, coreEntries = [];
-    for (const path of [...paths.filter(p => p !== '.agents/core/manifest.yaml'), '.agents/core/manifest.yaml', 'AGENTS.md'].sort()) {
+    for (const path of [...bundledPaths.filter(p => p !== '.agents/core/manifest.yaml'), '.agents/core/manifest.yaml', 'AGENTS.md'].sort()) {
       const bytes = readRegular(staging, path), mode = fileMode(checkedPath(staging, path), sourceModes.get(path));
       inventory[path] = { sha256: sha256(bytes), mode, source_path: path };
       coreEntries.push({ path, bytes, mode });
@@ -121,7 +144,7 @@ async function buildPlatformRelease({ root, output, platform, allowDirty = false
     if (current.revision !== source.revision || [...sourceHashes].some(([p, hash]) => sha256(readRegular(root, p)) !== hash) ||
         paths.join('\n') !== [...walkFiles(root, '.agents/core', { exclude: excluded }), ...launcherFiles].sort().join('\n')) fail('RELEASE_INPUT_CHANGED', 'Core changed while building the release.');
     const result = { version: build.version, platform, development: source.dirty, coreRevision: source.revision,
-      products, output: destination, instance: targetRoot, template: targetRoot, index, sourceDigest: sha256(stableJSON(inventory)), managedFiles: Object.keys(inventory).length, dryRun };
+      products, output: destination, instance: targetRoot, template: targetRoot, index, sourceDigest: sha256(stableJSON([...sourceHashes])), managedFiles: Object.keys(inventory).length, dryRun };
     if (!dryRun) {
       mkdirSync(destination, { recursive: true });
       for (const entry of fullEntries) writeAtomic(checkedPath(targetRoot, entry.path), entry.bytes, entry.mode);
@@ -138,7 +161,8 @@ async function buildPlatformRelease({ root, output, platform, allowDirty = false
 export async function buildRelease(options) {
   const { root, output, platform, dryRun = false } = options;
   const build = parseJSON(readRegular(root, '.agents/core/build.json'), 'build.json');
-  const targets = platform ? [platform] : Object.keys(build.runtime?.packages ?? {}).sort();
+  if(platform&&!releaseTargets.includes(platform))fail('PLATFORM_UNSUPPORTED', `Official release is not supported for ${platform}.`);
+  const targets = platform ? [platform] : Object.keys(build.runtime?.packages ?? {}).filter(target=>releaseTargets.includes(target)).sort();
   if (!targets.length) fail('PLATFORM_UNSUPPORTED', 'No bundled release platforms are declared.');
   if (targets.length === 1) return buildPlatformRelease({ ...options, platform: targets[0] });
   const destination = resolve(root, output ?? `.agents/runtime-data/releases/${build.version}`);
