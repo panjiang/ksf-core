@@ -8,6 +8,7 @@ import { createTaskReviewSource } from '../src/services/task-review.js';
 import { PROTOCOL, turnPath, taskPath } from '../src/task-capture/storage.js';
 import { createReviews } from '../../applications/conversations/backend/reviews.js';
 import { createReviewDB } from '../../applications/conversations/backend/review-db.js';
+import { createCLI } from '../../applications/conversations/cli/index.mjs';
 import { localClock, instant } from '../../applications/conversations/backend/review-model.js';
 
 const A = 'a'.repeat(64), B = 'b'.repeat(64);
@@ -173,12 +174,70 @@ test('IANA scheduling uses the intended calendar date', () => {
   assert.equal(localClock('2026-10-29T00:00:00Z').date, '2026-10-29');
 });
 
+test('a selected-chat review excludes other sources and keeps its scope across refresh and reports', async t => {
+  const f=fixture(t); f.turn(); f.turn(B,'other',{messages:[{id:'private',role:'user',at:AT,content:[{type:'text',text:'UNRELATED_PRIVATE_CANARY'}]}]}); await f.configure();
+  const accepted=await f.app.call('review.generate',{date:'2026-10-28',taskId:A}); await f.app.pump();
+  const report=await f.app.call('review.read',{id:accepted.id}); assert.equal(report.scope.taskId,A); assert.deepEqual(report.chats.map(c=>c.taskId),[A]);
+  assert(f.submissions.every(r=>!r.inputs[0].text.includes('UNRELATED_PRIVATE_CANARY')&&!r.inputs[0].text.includes(B)));
+  const refreshed=await f.app.call('review.generate',{date:report.date,taskId:A,force:true,operationId:'scope-refresh'}); await f.app.pump();
+  assert.equal((await f.app.call('review.read',{id:refreshed.id})).scope.taskId,A);
+  const full=await f.generate(); assert.notEqual(full.id,accepted.id); assert.equal(full.scope,undefined); assert.equal(full.chats.length,2); assert.equal(full.edition,1);
+  await assert.rejects(f.app.call('review.generate',{date:report.date,taskId:'c'.repeat(64)}),{code:'REVIEW_SOURCE_UNAVAILABLE'});
+  const overview=await f.app.call('review.overview'); assert.equal(overview.reports.find(r=>r.id===report.id).scope.taskId,A); assert.equal(overview.reports.find(r=>r.id===report.id).scope.title,undefined);
+  f.turn(A,'one',{capturePolicyHeld:true});assert.equal((await f.app.call('review.read',{id:report.id})).scope.title,'原始证据不可用的对话');
+});
+
+test('outstanding reviews reconcile only their own source scope', async t => {
+  const f=fixture(t,{aiStatus:'reconciling'});f.turn();f.turn(B,'one');await f.configure();
+  const one=await f.app.call('review.generate',{date:'2026-10-28',taskId:A});await f.app.pump();
+  const two=await f.app.call('review.generate',{date:'2026-10-28',taskId:B});await f.app.pump();
+  const daily=await f.app.call('review.generate',{date:'2026-10-28'});assert.notEqual(two.id,one.id);assert.notEqual(daily.id,one.id);assert.notEqual(daily.id,two.id);
+  assert.equal((await f.app.call('review.generate',{date:'2026-10-28',taskId:A})).id,one.id);
+});
+test('the installed-app CLI envelope preserves selected sources and legacy flat calls, rejecting mixed input',async t=>{
+  const f=fixture(t);f.turn();f.turn(B,'other');await f.configure();const cli=createCLI({invoke:(method,params)=>f.app.call(method,params)});
+  const accepted=await cli.execute('generate',{expectedPackageDigest:'fixture',operationId:'cli-scoped',params:{date:'2026-10-28',taskId:A}});await f.app.pump();
+  const report=await cli.execute('report',{params:{id:accepted.id}});assert.equal(report.scope.taskId,A);assert.deepEqual(report.chats.map(c=>c.taskId),[A]);
+  assert.equal((await cli.execute('generate',{date:'2026-10-28',taskId:A})).id,accepted.id);
+  const suggestion=(await cli.execute('suggestions',{params:{}}))[0];assert.match((await cli.execute('handoff',{params:{id:suggestion.id,revision:suggestion.revision}})).text,/待发送草稿/);
+  for(const input of [{params:{taskId:A},taskId:B},{params:[]},{params:'invalid'},{operationId:'one',params:{operationId:'two'}}])assert.throws(()=>cli.execute('generate',input),{code:'APP_CALL_INVALID'});
+});
+
+test('selected-chat runs do not block another scope or satisfy the automatic daily review', async t => {
+  const f=fixture(t,{clock:Date.parse('2026-10-28T12:00:00+08:00')}); f.turn(); f.turn(B,'one'); await f.configure({enabled:true});
+  const scoped=await f.app.call('review.generate',{date:'2026-10-28',taskId:A}); await f.app.pump();
+  f.setClock('2026-10-29T07:00:00+08:00'); await f.app.tick();
+  const reports=(await f.app.call('review.overview')).reports.filter(r=>r.date==='2026-10-28'); assert.equal(reports.length,2); assert(reports.some(r=>!r.scope));
+  assert.equal(reports.find(r=>r.id===scoped.id).scope.taskId,A);
+});
+
+test('withdrawn and out-of-scope suggestions are not passed to the review model', async t => {
+  const f=fixture(t);f.turn();f.turn(B,'other');await f.configure();
+  const db=createReviewDB(join(f.root,'user'));
+  try { db.put('suggestion','outside',{id:'outside',key:'outside',status:'ignored',problem:'OUTSIDE_SUGGESTION_CANARY',targetKey:'outside',evidence:[{taskId:B,turnId:'other'}]}); }
+  finally { db.close(); }
+  const result=await f.app.call('review.generate',{date:'2026-10-28',taskId:A});await f.app.pump();assert((await f.app.call('review.read',{id:result.id})).scope);
+  assert(f.submissions.every(r=>!r.inputs[0].text.includes('OUTSIDE_SUGGESTION_CANARY')));
+  f.turn(B,'other',{policy:'exclude',status:'excluded'});const count=f.submissions.length;await f.generate();assert(f.submissions.slice(count).every(r=>!r.inputs[0].text.includes('OUTSIDE_SUGGESTION_CANARY')));
+});
+
 test('withdrawn sources hide derived report content and suggestion evidence', async t => {
   const f=fixture(t);f.turn();await f.configure();const report=await f.generate();
-  f.turn(A,'one',{policy:'exclude',status:'excluded'});
-  const current=await f.app.call('review.read',{id:report.id});assert.equal(current.sourceUnavailable,true);assert.equal(current.workItems.length,0);assert.equal(current.suggestions.length,0);assert.equal(Object.keys(current.sourceMap).length,0);
-  assert.equal((await f.app.call('suggestions.list')).length,0);
-  assert.equal(JSON.stringify((await f.app.call('review.overview')).reports).includes('缺少可查证'),false);
+  const suggestion=(await f.app.call('suggestions.list'))[0], request={id:suggestion.id,revision:suggestion.revision};
+  assert.match((await f.app.call('suggestions.handoff',request)).text,/待发送草稿/);
+  const db=createReviewDB(join(f.root,'user'));
+  try {
+    const before=db.get('suggestion',suggestion.id);
+    for (const withdrawn of [{capturePolicyHeld:true},{policy:'exclude',status:'excluded'}]) {
+      f.turn(A,'one',withdrawn);
+      const current=await f.app.call('review.read',{id:report.id});assert.equal(current.sourceUnavailable,true);assert.equal(current.workItems.length,0);assert.equal(current.suggestions.length,0);assert.equal(Object.keys(current.sourceMap).length,0);
+      assert.equal((await f.app.call('suggestions.list')).length,0);
+      await assert.rejects(f.app.call('suggestions.handoff',request),{code:'REVIEW_SOURCE_UNAVAILABLE'});
+      await assert.rejects(f.app.call('suggestions.update',{...request,status:'accepted'}),{code:'REVIEW_SOURCE_UNAVAILABLE'});
+      assert.deepEqual(db.get('suggestion',suggestion.id),before);
+      assert.equal(JSON.stringify((await f.app.call('review.overview')).reports).includes('缺少可查证'),false);
+    }
+  } finally { db.close(); }
 });
 
 test('history target membership survives switching the last route and catalog follows archive state', async t => {

@@ -3,6 +3,7 @@ import { parseInput } from '../metadata/input.js';
 import { MetadataError, invalid } from '../metadata/errors.js';
 import { readInputFile } from '../services/metadata.js';
 import { project, errorItem } from '../services/projects.js';
+import { runProjectManagementCommand } from './project-management.js';
 
 const supported = {
   list: ['scope', 'json', 'help'], read: ['scope', 'part', 'json', 'help'],
@@ -23,7 +24,7 @@ const usages = {
 
 export function projectHelp(operation) {
   return `KSF project${operation ? ` ${operation}` : ''}\n\nUsage:\n` +
-    (operation ? [usages[operation]] : Object.values(usages)).map(usage => `  ksf project ${usage}`).join('\n') + '\n\n' +
+    (operation ? [usages[operation]] : [...Object.values(usages), 'management read|check|write <name> [--help]']).map(usage => `  ksf project ${usage}`).join('\n') + '\n\n' +
     'Targets are directory names under 项目/ (current) or 档案/项目/ (archived). Default scope: current.\n' +
     'read defaults to all; list returns root-card summaries without bodies.\n' +
     'write accepts {"metadata": {...}, "body": "..."}; creation requires body.\n' +
@@ -89,6 +90,7 @@ function render(result) {
 }
 
 export function runProjectCommand(args, root) {
+  if (args[0] === 'management') return runProjectManagementCommand(args.slice(1), root);
   const result = { ok: false, command: 'project', operation: Object.hasOwn(supported, args[0]) ? args[0] : null, data: null, errors: [] };
   let exitCode;
   try {

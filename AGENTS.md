@@ -2,10 +2,10 @@
 id: "cooperation.ksf.entry"
 name: "KSF 入口协同"
 description: "KSF 固定入口。通过本实例的 context entry 命令取得孵化或正常工作要求，由当前 Agent 遵循。"
-version: 0.1.29
+version: 0.1.33
 status: active
 references:
-  - partner.ksf.runtime@0.1.28
+  - partner.ksf.runtime@0.1.32
 ---
 
 # KSF 入口协同

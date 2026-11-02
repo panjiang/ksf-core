@@ -8,7 +8,7 @@ import { nativeTurnsSince } from '../task-capture/codex.js';
 import { encode, fail, isToken } from '../routing/schema.js';
 import { sha256 } from '../shared/hash.js';
 import { declareTask, receipts } from '../task-capture/declarations.js';
-import { discover, sourceMeta, belongsToRoot, isInternalSession, parseTranscript, titles, messageDigest } from '../task-capture/codex.js';
+import { discover, sourceMeta, belongsToRoot, isInternalSession, parseTranscript, titles, messageDigest, TRANSCRIPT_ADAPTER_VERSION } from '../task-capture/codex.js';
 import { CAPTURE, ARCHIVE, PROTOCOL, config, locked, readJSON, writeJSON, taskPath, turnPath, readTurn, taskIds, turns, summarizeTurn, rebuildTask } from '../task-capture/storage.js';
 import { definitionContext, decorateRecord, verifyTargetSnapshot } from '../routing/definitions.js';
 import { turnProjects, ownedProjects, turnRelation, projectContext, historyText } from '../task-capture/projects.js';
@@ -307,11 +307,11 @@ export async function syncTasks({ root, transcriptPath, env = process.env, force
       if (!taskId) fail('TASK_KEY_INVALID', 'Missing task identity key.');
       const sourceId = sha256(path), indexPath = `${CAPTURE}/sources/${sourceId}.json`;
       const cursor = readJSON(root, indexPath);
-      if (!force && !hook && cursor?.policyVersion === capturePolicyVersion && cursor.configurationVersion===configurationVersion && cursor.size === stat.size && cursor.mtimeMs === stat.mtimeMs) continue;
+      if (!force && !hook && cursor?.adapterVersion === TRANSCRIPT_ADAPTER_VERSION && cursor.policyVersion === capturePolicyVersion && cursor.configurationVersion===configurationVersion && cursor.size === stat.size && cursor.mtimeMs === stat.mtimeMs) continue;
       // Recheck the current native round; completed earlier rounds need not be read again.
       // Full CLI sync, source replacement or shrink rebuilds from the original boundary.
-      const resume = !force && !hook && cursor?.policyVersion === capturePolicyVersion && cursor.configurationVersion===configurationVersion && cursor.ino === stat.ino && stat.size > cursor.size && cursor.resumeOffset <= stat.size ? cursor.resumeOffset : 0;
-      const parsed = await parseTranscript(path, settings.activatedAt, resume);
+      const resume = !force && !hook && cursor?.adapterVersion === TRANSCRIPT_ADAPTER_VERSION && cursor.policyVersion === capturePolicyVersion && cursor.configurationVersion===configurationVersion && cursor.ino === stat.ino && stat.size > cursor.size && cursor.resumeOffset <= stat.size ? cursor.resumeOffset : 0;
+      const parsed = await parseTranscript(path, settings.activatedAt, resume, {allowDelegatedInput:meta.thread_source === 'agent_created_thread'});
       if (hook && ['UserPromptSubmit', 'Interrupt'].includes(hook.hook_event_name) && isToken(hook.turn_id)) {
         const turn = parsed.turns.get(hook.turn_id);
         if (turn) turn.interrupted ||= hook.hook_event_name === 'Interrupt';
@@ -335,7 +335,7 @@ export async function syncTasks({ root, transcriptPath, env = process.env, force
         rebuildTask(root, taskId, names.get(meta.id));
         const latest = [...parsed.turns.values()].at(-1)?.startOffset;
         const resumeOffset = pendingOffsets.length ? Math.min(...pendingOffsets) : latest ?? parsed.nextOffset;
-        writeJSON(root, indexPath, { protocol: PROTOCOL, policyVersion: capturePolicyVersion, configurationVersion, taskId, path, size: stat.size, ino: stat.ino, resumeOffset, mtimeMs: stat.mtimeMs, lastSync: now() });
+        writeJSON(root, indexPath, { protocol: PROTOCOL, adapterVersion: TRANSCRIPT_ADAPTER_VERSION, policyVersion: capturePolicyVersion, configurationVersion, taskId, path, size: stat.size, ino: stat.ino, resumeOffset, mtimeMs: stat.mtimeMs, lastSync: now() });
       });
     } catch (error) { errors.push(issue(error)); }
   }

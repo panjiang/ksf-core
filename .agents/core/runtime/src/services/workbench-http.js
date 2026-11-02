@@ -59,7 +59,7 @@ export function createWorkbenchHTTP(root, options = {}) {
       }
       const query = key => { const values = url.searchParams.getAll(key); assert(values.length <= 1, 'INVALID_ARGUMENTS', `参数 ${key} 重复。`); return values[0] ?? undefined; };
       const path = query('path') ?? '', route = url.pathname;
-      if (route === '/api/workbench/session' && !write) { json(200, { instanceId: files.instanceId, token, nonce, capabilities: ['workspace', 'git', 'applications-v1', 'ai-tasks-v1', 'codex-conversations-v1','host-terminal-v1','app-storage-v1','app-storage-runtime-v1','projects-v1','config-v1','runtime-monitor-v1'], sessionId: nonce }); return true; }
+      if (route === '/api/workbench/session' && !write) { json(200, { instanceId: files.instanceId, token, nonce, capabilities: ['workspace', 'git', 'applications-v1', 'ai-tasks-v1', 'codex-conversations-v1','host-terminal-v1','app-storage-v1','app-storage-runtime-v1','projects-v1','projects-management-v1','assets-v1','config-v1','runtime-monitor-v1'], sessionId: nonce }); return true; }
       if (route.startsWith('/api/ai/')) {
         assert(write,'WEB_METHOD_NOT_ALLOWED','AI 配置与管理接口需要会话保护的 POST。',405);
         if(route==='/api/ai/material-upload') {

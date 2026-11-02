@@ -46,7 +46,7 @@ test('shipped definitions resolve the minimal runtime in a fresh root with empty
   }
   const entry = f.query('partner', 'read', runtimeReference);
   assert.deepEqual(entry.errors, []);
-  assert.deepEqual(entry.data.references.map(row => row.id), ['ability-route', 'project-route', 'project-intake', 'knowledge-organize', 'asset-maintenance'].map(name => 'competency.ksf.' + name));
+  assert.deepEqual(entry.data.references.map(row => row.id), ['ability-route', 'project-route', 'asset-maintenance'].map(name => 'competency.ksf.' + name));
   for (const ref of entry.data.references) {
     const read = f.query('competency', 'read', ref.reference);
     assert.deepEqual(read.errors, []);
@@ -99,7 +99,9 @@ test('project intake is a normal system competency with effective user derivatio
   const read = f.query('competency', 'read', id + '@' + system.data.object.version);
   assert.deepEqual(read.errors, []); assert.equal(read.data.object.source, 'user');
   const runtime = f.query('partner', 'read', runtimeReference);
-  assert.deepEqual(runtime.errors, []); assert.ok(runtime.data.references.some(row => row.id === id));
+  assert.deepEqual(runtime.errors, []); assert.ok(!runtime.data.references.some(row => row.id === id));
+  const planning = f.query('competency', 'read', 'competency.ksf.project-planning');
+  assert.deepEqual(planning.errors, []); assert.ok(planning.data.references.some(row => row.id === id));
   assert.ok(!JSON.stringify(contextCapabilities(f.root).data).includes(id));
 });
 

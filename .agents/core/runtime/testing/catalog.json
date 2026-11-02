@@ -6927,6 +6927,106 @@
         "win32": 5
       },
       "timingBasis": "Scheduling estimate for a native fixture containment fault injection; not a measured CI duration."
+    },
+    {
+      "id": "core:project-management",
+      "path": ".agents/core/runtime/tests/project-management.test.js",
+      "owner": "core",
+      "covers": [
+        "core",
+        "app:com.ksf.projects"
+      ],
+      "suite": "quick",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "cacheable": false,
+      "inputs": [
+        ".agents/core/runtime/src",
+        ".agents/core/runtime/tests/helpers",
+        ".agents/core/abilities",
+        ".agents/core/docs",
+        ".agents/core/distribution",
+        ".agents/core/build.json",
+        ".agents/core/applications/sdk/src",
+        ".agents/core/applications/sdk/server",
+        ".github",
+        "AGENTS.md",
+        ".agents/ksf",
+        ".agents/ksf.ps1",
+        ".gitignore",
+        ".gitattributes",
+        "README.md",
+        ".agents/core/runtime/tests/project-management.test.js"
+      ],
+      "requirements": [],
+      "timeoutMs": 120000,
+      "seconds": {
+        "darwin": 0.4,
+        "win32": 4
+      },
+      "timingBasis": "Conservative planning estimate for new local tests; Windows not yet measured."
+    },
+    {
+      "id": "app:com.ksf.projects:plan-merge",
+      "path": ".agents/core/applications/projects/tests/plan-merge.test.mjs",
+      "owner": "app:com.ksf.projects",
+      "covers": [
+        "app:com.ksf.projects"
+      ],
+      "suite": "quick",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "cacheable": false,
+      "inputs": [
+        ".agents/core/applications/projects",
+        ".agents/core/applications/sdk/src",
+        ".agents/core/applications/sdk/server",
+        ".agents/core/applications/projects/tests/plan-merge.test.mjs"
+      ],
+      "requirements": [
+        "yaml"
+      ],
+      "timeoutMs": 120000,
+      "seconds": {
+        "darwin": 0.2,
+        "win32": 2
+      },
+      "timingBasis": "Conservative planning estimate for new local tests; Windows not yet measured."
+    },
+    {
+      "id": "core:assets",
+      "path": ".agents/core/runtime/tests/assets.test.js",
+      "owner": "core",
+      "covers": [
+        "core",
+        "app:com.ksf.abilities",
+        "app:com.ksf.knowledge",
+        "app:com.ksf.conversations"
+      ],
+      "suite": "quick",
+      "platforms": [
+        "darwin",
+        "win32"
+      ],
+      "cacheable": false,
+      "inputs": [
+        ".agents/core/runtime/src",
+        ".agents/core/abilities",
+        ".agents/core/applications/shared",
+        ".agents/core/applications/conversations/backend/suggestion-delivery.js",
+        ".agents/core/runtime/tests/assets.test.js"
+      ],
+      "requirements": [],
+      "timeoutMs": 120000,
+      "seconds": {
+        "darwin": 0.4,
+        "win32": 4
+      },
+      "timingBasis": "Conservative planning estimate for new local tests; Windows not yet measured."
     }
   ],
   "timingBaseline": {

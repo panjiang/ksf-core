@@ -1,3 +1,4 @@
+import { suggestionUpdate, suggestionHandoff } from './suggestion-delivery.js';
 import { desktopRequest, desktopStep } from './review-desktop.js';
 import { resolveReviewCapability } from './review-capability.js';
 import { createReviewDB } from './review-db.js';
@@ -17,7 +18,7 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
   const stamp = () => new Date(now()).toISOString();
   const config = () => ({ ...defaults, ...user.get('config', 'main') });
   const metaCache=new Map();
-  const reportMeta=r=>({id:r.id,date:r.date,edition:r.edition,revision:r.revision,state:r.state,reviewedAt:r.reviewedAt,createdAt:r.createdAt,supplementTo:r.supplementTo,workCount:r.workItems.length,suggestionCount:r.suggestionIds.length});
+  const reportMeta=r=>({id:r.id,date:r.date,edition:r.edition,revision:r.revision,state:r.state,reviewedAt:r.reviewedAt,createdAt:r.createdAt,supplementTo:r.supplementTo,workCount:r.workItems.length,suggestionCount:r.suggestionIds.length,...(r.scope?{scope:{taskId:r.scope.taskId}}:{})});
   function reportMetas(){
     const saved=new Map(user.list('report-meta').map(r=>[r.id,r]));
     for(const id of user.ids('report'))if(!saved.has(id)){if(!metaCache.has(id))metaCache.set(id,reportMeta(user.get('report',id)));saved.set(id,metaCache.get(id));}
@@ -32,6 +33,10 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
       for (const error of page.errors) errors.set(JSON.stringify(error), error); capture = page.capture; offset = page.nextOffset;
     } while (offset !== null);
     return { records, chats: [...chats.values()], errors: [...errors.values()], capture };
+  }
+  async function requireSuggestionSources(suggestion) {
+    const snapshot = await sources(), allowed = new Set(snapshot.records.map(keyFor));
+    check(suggestion.evidence?.length && suggestion.evidence.every(e => allowed.has(keyFor(e))), '建议引用的来源当前不允许读取。', 'REVIEW_SOURCE_UNAVAILABLE');
   }
   async function readTurn(turn) {
     const messages = []; let offset = 0, record;
@@ -101,19 +106,22 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
     }
     if (messages.length) chunks.push(messages); return chunks;
   }
-  async function prepare(date, manual, {force=false,operationId}={}) {
+  async function prepare(date, manual, {force=false,operationId,taskId}={}) {
     const settings = config(); check(validDate(date), '需要有效的回顾日期。');
     check(date <= localClock(now(), settings.timeZone).date, '不能生成未来日期的回顾。');
-    const period = bounds(date, settings.timeZone), daily = await sources({ startAt: period.startAt, endAt: period.endAt });
+    check(taskId === undefined || typeof taskId === 'string' && /^[a-f0-9]{64}$/.test(taskId), '需要查询返回的准确聊天编号。');
+    const period = bounds(date, settings.timeZone), daily = await sources({ startAt: period.startAt, endAt: period.endAt, ...(taskId?{taskId}:{}) });
+    if (taskId) check(daily.chats.some(c => c.taskId === taskId), '指定聊天当前没有允许回顾的来源。', 'REVIEW_SOURCE_UNAVAILABLE');
+    const scope = taskId ? { taskId, title: daily.chats.find(c => c.taskId === taskId).title } : null;
     const capability = settings.executionKind === 'desktop' ? await resolveReviewCapability(call) : null;
-    const inputDigest = digest([date, settings.timeZone, settings.executionKind === 'desktop' ? {kind:'desktop',project:settings.desktopProject,capability} : settings.profileId, POLICY_VERSION, daily.records.map(t => [t.taskId, t.turnId, t.digest]), daily.errors]);
+    const inputDigest = digest([date, settings.timeZone, settings.executionKind === 'desktop' ? {kind:'desktop',project:settings.desktopProject,capability} : settings.profileId, POLICY_VERSION, daily.records.map(t => [t.taskId, t.turnId, t.digest]), daily.errors, ...(taskId?[{taskId}]:[])]);
     if(force)check(manual&&typeof operationId==='string'&&operationId.length>0&&operationId.length<160,'重新核对需要稳定操作编号。');
     const id = date + ':' + inputDigest.slice(0, 24)+(force?':refresh-'+digest(operationId).slice(0,12):''), existing = user.get('report', id), priorRun = runtime.get('run', id);
     if (existing || priorRun) return { id, state: existing ? 'ready' : priorRun.state, existing: true };
-    const outstanding = runtime.list('run').find(r => r.date === date && ['preparing', 'extracting', 'synthesizing', 'reconciling'].includes(r.state));
+    const outstanding = runtime.list('run').find(r => r.date === date && (r.scope?.taskId??null) === (taskId??null) && ['preparing', 'extracting', 'synthesizing', 'reconciling'].includes(r.state));
     if (outstanding) return { id: outstanding.id, state: outstanding.state, existing: true };
     if (daily.records.length) check(settings.executionKind === 'desktop' ? settings.desktopProject : settings.profileId, '请先在回顾设置中选择 AI 执行配置。', 'REVIEW_PROFILE_REQUIRED');
-    const run = { id, date, manual, inputDigest, profileId: settings.profileId, executionKind: settings.executionKind, desktopProject: settings.desktopProject, capability, timeZone: settings.timeZone, startAt: period.startAt, endAt: period.endAt,
+    const run = { id, date, manual, inputDigest, ...(scope?{scope}:{}), profileId: settings.profileId, executionKind: settings.executionKind, desktopProject: settings.desktopProject, capability, timeZone: settings.timeZone, startAt: period.startAt, endAt: period.endAt,
       state: 'preparing', createdAt: stamp(), updatedAt: stamp(), chats: daily.chats, selectedTurns: daily.records.map(keyFor),
       turns: [], packets: [], sourceMap: {}, targets: {}, artifacts: [], gaps: daily.errors, capture: daily.capture, dayChatCount:daily.chats.length, error: null };
     runtime.put('run', id, run); return { id, state: run.state, existing: false };
@@ -198,8 +206,9 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
     }
     const contextLimit = Math.max(300, Math.min(8000, Math.floor(35000 / Math.max(1, Object.keys(run.targets).length))));
     const compactTargets = Object.fromEntries(Object.entries(run.targets).map(([key, target]) => [key, { ...target, current: target.current?.slice(0, contextLimit), excerpt: true }]));
+    const permittedSources = new Set(run.turns.map(keyFor));
     const input = { date: run.date, sourceMap: compactSources, extracted: summaries, targets: compactTargets, artifacts: run.artifacts, gaps: run.gaps,
-      chats: run.chats.filter(c=>Object.values(run.sourceMap).some(s=>s.taskId===c.taskId)).map(c => ({ taskId: c.taskId, title: c.title })), priorSuggestions: user.list('suggestion').map(({ id, key, status, problem, targetKey }) => ({ id, key, status, problem, targetKey })) };
+      chats: run.chats.filter(c=>Object.values(run.sourceMap).some(s=>s.taskId===c.taskId)).map(c => ({ taskId: c.taskId, title: c.title })), priorSuggestions: user.list('suggestion').filter(s=>s.evidence?.length && s.evidence.every(e=>permittedSources.has(keyFor(e)))).map(({ id, key, status, problem, targetKey }) => ({ id, key, status, problem, targetKey })) };
     // The configured service enforces its material and context limits; never truncate evidence to fit.
     const output = await step(run, 'synthesis', reportInstruction, input, reportSchema); if (output) await publish(run, output);
   }
@@ -233,10 +242,10 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
       if (proposed?.openItems.length || proposed?.unknownOperations.length) blockers.push('存在未交付事项或结果未知的操作');
       return { taskId: chat.taskId, title: chat.title, fingerprint: chat.fingerprint, eligible: !blockers.length, blockers: [...new Set(blockers)], reason: proposed?.reason ?? '', coverage };
     });
-    const previous = reportMetas().filter(r => r.date === run.date).sort((a, b) => a.edition - b.edition);
+    const previous = reportMetas().filter(r => r.date === run.date && (r.scope?.taskId??null) === (run.scope?.taskId??null)).sort((a, b) => a.edition - b.edition);
     const report = { ...output, id: run.id, revision: 1, edition: previous.length + 1, supplementTo: previous.findLast(r => r.reviewedAt)?.id ?? null,
       execution: { kind: run.executionKind ?? 'task', profileId: run.profileId, project: run.desktopProject ?? null, ...(run.capability?{capability:run.capability}:{}) }, executionReceipts: [...new Map([...runtime.list('step').filter(s => s.id.startsWith(run.id + ':') && s.receipt).map(s => s.receipt), ...run.packets.map(p=>runtime.get('extraction-receipt',p.key)).filter(Boolean)].map(r=>[r.operationId,r])).values()],
-      date: run.date, createdAt: stamp(), reviewedAt: null, state: 'ready', startAt: run.startAt, endAt: run.endAt, inputDigest: run.inputDigest, policyVersion: POLICY_VERSION,
+      date: run.date, ...(run.scope?{scope:run.scope}:{}), createdAt: stamp(), reviewedAt: null, state: 'ready', startAt: run.startAt, endAt: run.endAt, inputDigest: run.inputDigest, policyVersion: POLICY_VERSION,
       sourceMap: run.sourceMap, turns: run.turns, chats: run.chats, coverage, closures, artifacts: run.artifacts, targets: run.targets, gaps: run.gaps, capture: run.capture, suggestionIds: [],
       activity: { chats: run.dayChatCount??run.chats.length, turns: run.selectedTurns.length },
       workItems: output.workItems.map(w => ({ ...w, evidenceBasis: 'reported' })) };
@@ -244,7 +253,7 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
       for (const suggestion of output.suggestions) {
         const id = 'suggestion-' + digest([suggestion.type, suggestion.targetKey, suggestion.key]).slice(0, 24), old = user.get('suggestion', id);
         const merged = { ...suggestion, targetLabel:run.targets[suggestion.targetKey]?.name ?? '新增能力候选', targetPath:run.targets[suggestion.targetKey]?.path ?? null, id, status: old?.status ?? 'pending', createdAt: old?.createdAt ?? stamp(), updatedAt: stamp(), revision: (old?.revision ?? 0) + 1,
-          evidence: [...new Map([...(old?.evidence ?? []), ...suggestion.citations.map(c => run.sourceMap[c])].map(s => [s.sourceId, s])).values()], reportIds: [...new Set([...(old?.reportIds ?? []), report.id])], resolution: old?.resolution ?? null };
+          evidence: [...new Map([...(old?.evidence ?? []), ...suggestion.citations.map(c => run.sourceMap[c])].map(s => [s.sourceId, s])).values()], reportIds: [...new Set([...(old?.reportIds ?? []), report.id])], resolution: old?.resolution ?? null, ...(old?.delivery ? {delivery:old.delivery} : {}) };
         user.put('suggestion', id, merged); report.suggestionIds.push(id);
       }
       report.suggestionIds=[...new Set(report.suggestionIds)];
@@ -277,11 +286,11 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
         const through = shiftDay(clock.date, clock.time >= settings.time ? -1 : -2);
         // Queue one missing day per tick, oldest first, including empty days without AI calls.
         for (let date = settings.activatedDate; date <= through; date = shiftDay(date, 1)) {
-          if (reportMetas().some(r => r.date === date) || runtime.list('run').some(r => r.date === date)) continue;
+          if (reportMetas().some(r => r.date === date && !r.scope) || runtime.list('run').some(r => r.date === date && !r.scope)) continue;
           await prepare(date, false); break;
         }
         // Detect delayed capture in recent reviewed days; same fingerprint recovers the same run.
-        const recent = reportMetas().filter(r => r.date >= settings.activatedDate && r.date <= through);
+        const recent = reportMetas().filter(r => !r.scope && r.date >= settings.activatedDate && r.date <= through);
         if (recent.length) await prepare(recent.sort((a, b) => a.date.localeCompare(b.date))[Number(now() / timerMs) % recent.length | 0].date, false);
       }
       await pump();
@@ -367,7 +376,7 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
     if (!withdrawn.size) return report;
     const permitted = item => item.citations.every(id => !withdrawn.has(id));
     const unavailableChats = new Set(Object.values(report.sourceMap).filter(s => withdrawn.has(s.sourceId)).map(s => s.taskId));
-    return { ...report, summary: '部分原始证据已撤回或不可读取，相关派生内容已隐藏。',
+    return { ...report, ...(report.scope?{scope:{taskId:report.scope.taskId,title:'原始证据不可用的对话'}}:{}), summary: '部分原始证据已撤回或不可读取，相关派生内容已隐藏。',
       workItems: report.workItems.filter(permitted), findings: report.findings.filter(permitted), suggestions: report.suggestions.filter(permitted),
       sourceMap: Object.fromEntries(Object.entries(report.sourceMap).filter(([id]) => !withdrawn.has(id))),
       chatClosures: report.chatClosures.filter(c => !unavailableChats.has(c.taskId)), chats: report.chats.filter(c => !unavailableChats.has(c.taskId)),
@@ -379,8 +388,8 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
     const reports = reportMetas().sort((a, b) => b.date.localeCompare(a.date) || b.edition - a.edition);
     return { config: settings, today, activity: { chats: snapshot.chats.length, turns: snapshot.records.length }, capture: snapshot.capture, errors: snapshot.errors,
       reports,
-      runs: runtime.list('run').filter(r=>r.state!=='failed'||!reports.some(report=>report.id.startsWith(r.id+':retry-'))).map(r=>({id:r.id,date:r.date,state:r.state,error:r.error,createdAt:r.createdAt,progress:r.progress??{completed:0,total:r.packets.length}})).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-      pendingSuggestions: user.countStatus('suggestion','pending'), diagnostic: runtime.get('diagnostic', 'last') };
+      runs: runtime.list('run').filter(r=>r.state!=='failed'||!reports.some(report=>report.id.startsWith(r.id+':retry-'))).map(r=>({id:r.id,date:r.date,...(r.scope?{scope:{taskId:r.scope.taskId}}:{}),state:r.state,error:r.error,createdAt:r.createdAt,progress:r.progress??{completed:0,total:r.packets.length}})).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      pendingSuggestions: ['pending','accepted','in_progress'].reduce((n,status)=>n+user.countStatus('suggestion',status),0), diagnostic: runtime.get('diagnostic', 'last') };
   }
   async function invoke(method, params = {}) {
     if (method === 'review.overview') return overview();
@@ -416,7 +425,25 @@ export function createReviews(context, { now = Date.now, timerMs = 2000, userDB,
       const snapshot = await sources(), allowed = new Set(snapshot.records.map(keyFor));
       return user.list('suggestion').filter(s => s.evidence.every(e => allowed.has(keyFor(e))) && (!params.status || s.status === params.status) && (!params.type || s.type === params.type) && (!params.targetKey || s.targetKey === params.targetKey));
     }
-    if (method === 'suggestions.update') { const old = user.get('suggestion', params.id); check(old && old.revision === params.revision, '建议已变化，请刷新。', 'REVIEW_CONFLICT'); check(['pending', 'deferred', 'ignored', 'resolved'].includes(params.status), '建议状态无效。'); const next = { ...old, status: params.status, revision: old.revision + 1, resolution: params.resolution ?? null, updatedAt: stamp() }; user.put('suggestion', next.id, next); return next; }
+    if (method === 'suggestions.handoff') {
+      const old = user.get('suggestion', params.id); check(old && old.revision === params.revision, '建议已变化，请刷新。', 'REVIEW_CONFLICT');
+      await requireSuggestionSources(old);
+      check(user.get('suggestion', params.id)?.revision === params.revision, '建议已变化，请刷新。', 'REVIEW_CONFLICT');
+      return { id: old.id, revision: old.revision, text: suggestionHandoff(old) };
+    }
+    if (method === 'suggestions.update') {
+      const next = suggestionUpdate(user.get('suggestion', params.id), params, stamp());
+      if (params.delivery) for (const path of next.delivery.evidence) {
+        if (/^https?:\/\//i.test(path)) continue;
+        check(!path.startsWith('/') && !path.startsWith('.agents/') && !path.split('/').some(v => !v || v === '.' || v === '..'), '证据须为普通业务原件的 KSF 内相对路径。');
+        await call('workspace', 'read', path);
+      }
+      await requireSuggestionSources(next);
+      // Evidence IO can yield; recheck before publication so another reviewer
+      // cannot be overwritten while this result is being validated.
+      check(user.get('suggestion', params.id)?.revision === params.revision, '建议已变化，请刷新。', 'REVIEW_CONFLICT');
+      user.put('suggestion', next.id, next); return next;
+    }
     if (method === 'chats.list') return chatList(params);
     if (method === 'chats.reviewState') return chatReviewState(params);
     if (method === 'chats.targets') return catalog(params);

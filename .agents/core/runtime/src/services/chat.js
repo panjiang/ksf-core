@@ -30,7 +30,7 @@ function current(root, key) {
   if (!record.document) fail('CHAT_TURN_UNAVAILABLE', 'No native turn is registered. Enable chat hooks and start a new native turn.');
   return record;
 }
-// Called only by the native Hook dispatcher, never by read or variable writes.
+// Called by native Hooks or explicit verified source sync, never by reads or variable writes.
 export function registerChatTurn({ root, identity, turnId, observedTurnIds = [], countingSince }) {
   if (!isToken(turnId)) invalid('Supply a valid native turnId.');
   if (!Array.isArray(observedTurnIds) || observedTurnIds.some(id => !isToken(id))) invalid('Invalid observed native turn identities.');

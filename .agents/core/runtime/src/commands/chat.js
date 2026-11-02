@@ -4,17 +4,19 @@ import { parseOptions, optionSpecs, hasJsonFlag } from '../shared/options.js';
 import { invalid } from '../chat-state/storage.js';
 import { enableChat, readChat, readChatContext, mutateChat } from '../services/chat.js';
 import { installTaskHooks } from '../services/tasks.js';
+import { syncChat } from '../services/chat-sync.js';
 
 export function chatHelp() {
   return `KSF chat\n\nUsage:\n` +
     `  ksf chat hooks [--json]\n` +
+    `  ksf chat sync [--json]\n` +
     `  ksf chat read [--object <id>] [--fields <name...>] [--json]\n` +
     `  ksf chat context [--json]\n` +
     `  ksf chat use --object <id> --turn <nativeTurnId> [--dry-run] [--json]\n` +
     `  ksf chat write [--object <id>] (--data <JSON> | --from -|file) --if-match <etag|missing> [--dry-run] [--json]\n` +
     `  ksf chat remove [--object <id>] (--fields <name...> | --all) --if-match <etag|missing> [--dry-run] [--json]\n` +
     `  ksf chat restart --object <id> --turn <nativeTurnId> --if-match <etag|missing> [--dry-run] [--json]\n\n` +
-    `Identity comes from CODEX_THREAD_ID, never cwd. Counting starts at future native turns after hooks activation.\n` +
+    `Identity comes from CODEX_THREAD_ID, never cwd. Hooks or explicit sync register verified native turns after activation.\n` +
     `Variables are arbitrary runtime JSON keys; no field registration, business schema or implicit inheritance.\n` +
     `Without --object, use shared chat variables. Object scopes use full IDs without @version.\n` +
     `write merges top-level keys; nested values replace whole values, null is a value.\n` +
@@ -42,7 +44,7 @@ export async function runChatCommand(args, root, { env = process.env, stdin } = 
   let exitCode = 0;
   try {
     if (!args.length || args.length === 1 && ['--help', '-h'].includes(operation)) return { stdout: chatHelp(), exitCode: 0 };
-    const names = { hooks: [], context: [], read: ['object', 'fields'], use: ['object', 'turn', 'dry-run'], write: ['object', 'data', 'from', 'if-match', 'dry-run'], remove: ['object', 'fields', 'all', 'if-match', 'dry-run'], restart: ['object', 'turn', 'if-match', 'dry-run'] }[operation];
+    const names = { hooks: [], sync: [], context: [], read: ['object', 'fields'], use: ['object', 'turn', 'dry-run'], write: ['object', 'data', 'from', 'if-match', 'dry-run'], remove: ['object', 'fields', 'all', 'if-match', 'dry-run'], restart: ['object', 'turn', 'if-match', 'dry-run'] }[operation];
     if (!names) invalid('Unknown chat operation.');
     const p = {};
     const seen = parseOptions(args.slice(1), { result: p, options: optionSpecs([...names, 'json', 'help'], {
@@ -53,7 +55,8 @@ export async function runChatCommand(args, root, { env = process.env, stdin } = 
       const hooks = installTaskHooks({ root, capture: false });
       const config = enableChat({ root });
       response.data = { ...config, hookConfigured: hooks.hookConfigured, trust: hooks.trust };
-    } else if (operation === 'read') response.data = readChat({ root, env, objectId: p.object, fields: p.fields });
+    } else if (operation === 'sync') response.data = await syncChat({root,env});
+    else if (operation === 'read') response.data = readChat({ root, env, objectId: p.object, fields: p.fields });
     else if (operation === 'context') response.data = readChatContext({ root, env });
     else {
       if (operation === 'write' && Number(p.data !== undefined) + Number(p.from !== undefined) !== 1) invalid('Choose exactly one of --data or --from.');

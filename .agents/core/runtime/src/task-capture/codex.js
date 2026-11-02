@@ -95,22 +95,34 @@ async function* sourceLines(stream, start) {
 }
 // Metadata-only reconciliation for chat counters. Never retain message bodies,
 // tool outputs or pre-activation native turns in the chat-state store.
-export async function nativeTurnsSince(path, activatedAt) {
-  const stream = createReadStream(path), ids = new Set();
+export async function nativeTurnState(path, activatedAt) {
+  const stream = createReadStream(path), ids = new Set(); let current = null, partial = false;
   try {
     for await (const entry of sourceLines(stream, 0)) {
-      if (!entry.complete) continue; // The Hook supplies the current turn even before the final flush.
+      if (!entry.complete) { partial = true; continue; } // Hooks may supply a boundary before its final flush.
       let row;
       try { row = JSON.parse(entry.line); } catch { fail('CHAT_SOURCE_PARTIAL', 'Native transcript contains an unreadable record; counting is unconfirmed.'); }
-      if (row.type !== 'event_msg' || row.payload?.type !== 'task_started') continue;
-      const p = row.payload, at = nativeTime(p.started_at, row.timestamp);
+      if (row.type === 'turn_context' && current && row.payload?.turn_id !== current.turnId) current.state = 'unconfirmed';
+      if (row.type !== 'event_msg') continue;
+      // Desktop started_at may be whole seconds while the envelope timestamp
+      // and session creation include milliseconds. Preserve that precision so
+      // a real first turn does not appear to precede its own thread creation.
+      const p = row.payload ?? {}, at = nativeTime(row.timestamp, nativeTime(p.started_at));
+      if (['task_complete','turn_aborted','task_interrupted'].includes(p?.type)) {
+        if (current && (!p.turn_id || p.turn_id === current.turnId)) current.state = p.type === 'task_complete' ? 'completed' : 'interrupted';
+        continue;
+      }
+      if (p?.type !== 'task_started') continue;
       if (!isToken(p.turn_id) || !Number.isFinite(Date.parse(at))) fail('CHAT_SOURCE_UNSUPPORTED', 'Unknown native turn boundary; counting is unconfirmed.');
+      current = { turnId: p.turn_id, startedAt: at, state: 'running' };
       if (Date.parse(at) > Date.parse(activatedAt)) ids.add(p.turn_id);
     }
   } finally { stream.destroy(); }
-  return [...ids];
+  return { turnIds: [...ids], current, partial };
 }
-export async function parseTranscript(path, activatedAt, startOffset = 0) {
+export async function nativeTurnsSince(path, activatedAt) { return (await nativeTurnState(path, activatedAt)).turnIds; }
+export const TRANSCRIPT_ADAPTER_VERSION = 1;
+export async function parseTranscript(path, activatedAt, startOffset = 0, { allowDelegatedInput = false } = {}) {
   const result = { turns: new Map(), issues: [], bytes: startOffset, nextOffset: startOffset };
   const stream = createReadStream(path, { start: startOffset });
   let active = null, order = startOffset, lineNumber = 0;
@@ -129,7 +141,8 @@ export async function parseTranscript(path, activatedAt, startOffset = 0) {
         const start = nativeTime(p.started_at, at);
         if (!isToken(active) || !Number.isFinite(Date.parse(start))) fail('TASK_SOURCE_UNSUPPORTED', 'Unknown native turn boundary format.');
         if (isToken(active) && Number.isFinite(Date.parse(start)) && Date.parse(start) > Date.parse(activatedAt) && !get(active))
-          result.turns.set(active, { turnId: active, startedAt: start, startOffset: offset, messages: [], outputs: [], questions: new Map(), complete: false, interrupted: false, issues: [] });
+          result.turns.set(active, { turnId: active, startedAt: start, startOffset: offset, messages: [], outputs: [], questions: new Map(), complete: false, interrupted: false, issues: [],
+            delegatedInput: allowDelegatedInput && p.turn_attribution?.turn_trigger === 'app_tool_create_thread' });
         continue;
       }
       if (row.type === 'turn_context' && isToken(p.turn_id)) { active = p.turn_id; continue; }
@@ -152,6 +165,14 @@ export async function parseTranscript(path, activatedAt, startOffset = 0) {
           try { turn.questions.set(p.call_id, { name: p.name, questions: JSON.parse(p.arguments ?? p.input).questions, at, order: ++order }); } catch { turn.issues.push({ code: 'TASK_QUESTION_INVALID' }); }
         }
       } else if (['function_call_output', 'custom_tool_call_output'].includes(p.type)) {
+        // This user-owned native thread receives its initial task as a typed
+        // create_thread output. Other tool results and quoted wrappers stay data.
+        if (turn.delegatedInput && p.type === 'function_call_output' && p.namespace === 'codex_app' && p.name === 'create_thread' && typeof p.output === 'string') {
+          const match = /^\s*<codex_delegation>\s*<source_thread_id>([^<]+)<\/source_thread_id>\s*<input>([\s\S]*)<\/input>\s*<\/codex_delegation>\s*$/.exec(p.output);
+          if (match && isToken(match[1]) && match[2].trim() && p.id) turn.messages.push({ id:p.id, role:'user', phase:'delegated_input',
+            at:nativeTime(p.internal_chat_message_metadata_passthrough?.create_time,at), sourceAt:at, order:++order,
+            origin:{kind:'codex-app-create-thread',sourceThreadId:match[1]}, content:[{type:'input_text',text:match[2]}] });
+        }
         const encoded = typeof p.output === 'string' ? p.output : JSON.stringify(p.output) ?? '';
         if (encoded.includes('KSF_TASK_RECEIPT:')) turn.outputs.push({ output: p.output, at, order: ++order });
         const question = turn.questions.get(p.call_id);

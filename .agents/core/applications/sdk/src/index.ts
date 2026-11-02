@@ -2,6 +2,7 @@ export type * from './application-sdk';
 export * from './ai-tasks';
 export * from './ai-services';
 export * from './capabilities';
+export * from './assets';
 export const SDK_VERSION=1;
 export * from './communication';
 

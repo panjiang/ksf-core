@@ -36,7 +36,7 @@ export function sections(body) {
   return result.map(({lines,...item})=>({...item,body:lines.join('\n').trim()}));
 }
 
-export function createBackend(context, {cli: injectedCLI} = {}) {
+export function createBackend(context, {cli: injectedCLI, management: injectedManagement} = {}) {
   let disposed = false; const children = new Set(); let writes = Promise.resolve();
   const root = resolve(context.workspace), data = resolve(context.dataDirectory);
   const conversations = createCodexConversationsClient(context);
@@ -127,6 +127,21 @@ export function createBackend(context, {cli: injectedCLI} = {}) {
   }
   async function call(method,params={},caller={}) {
     requireLive();
+    if(method.startsWith('management.')) {
+      key(params); await project(params);
+      const operation=method.slice(11);assert(['read','check','write','import'].includes(operation),'管理操作无效。');
+      if(operation==='import'){
+        const p=await project(params),scan=await scanTasks(p),task=scan.tasks.find(t=>t.path===params.path);
+        assert(task&&task.schema==='checkpoint','请选择本项目的有效检查点。');
+        const bytes=await readFile(await safePath(task.path));
+        const {createHash}=await import('node:crypto');
+        return {title:task.name,source:{path:task.path,taskId:task.taskId,digest:createHash('sha256').update(bytes).digest('hex'),state:task.state},description:'从既有检查点显式接入；请复核目标、承诺和当前状态。',nextAction:task.next.map(s=>s.body).join('\n').slice(0,20000)};
+      }
+      const input={name:params.name,scope:params.scope,...(params.data!==undefined?{data:params.data}:{}),...(params.dryRun?{dryRun:true}:{})};
+      const result=injectedManagement?await injectedManagement(operation,input):await context.services.call('projects','management'+operation[0].toUpperCase()+operation.slice(1),[input]);
+      if(result.errors?.length){const e=new Error(result.errors.map(x=>(x.path?x.path+'：':'')+x.message).join('\n'));e.code=result.errors[0].code;e.issues=result.errors;throw e;}
+      return result.data;
+    }
     if(method.startsWith('conversation.')) {
       const action=method.slice('conversation.'.length);
       if(action==='check')return conversations.check();
@@ -180,7 +195,7 @@ export function createBackend(context, {cli: injectedCLI} = {}) {
       try{const value=JSON.parse(context.storage?(await context.storage.read('preferences.json')).text??'{"schemaVersion":1}':await readFile(join(data,'preferences.json'),'utf8'));assert(value.schemaVersion===1,'应用显示设置格式不受支持。');return value;}catch(e){if(e.code==='ENOENT')return {schemaVersion:1};throw e;}
     }
     if(method==='preferences.save'){
-      assert(typeof params.selected==='string'&&params.selected.length<500&&['overview','tasks','chats','resources'].includes(params.tab),'显示设置无效。');
+      assert(typeof params.selected==='string'&&params.selected.length<500&&['overview','plan','work','governance','tasks','chats','resources'].includes(params.tab),'显示设置无效。');
       const value={schemaVersion:1,selected:params.selected,tab:params.tab};
       const publish=async()=>{requireLive();if(context.storage){await context.storage.write('preferences.json',JSON.stringify(value)+'\n');return;}await mkdir(data,{recursive:true});const temp=join(data,`.preferences-${randomUUID()}.tmp`);try{await writeFile(temp,JSON.stringify(value)+'\n',{mode:0o600});await rename(temp,join(data,'preferences.json'));}finally{await rm(temp,{force:true});}};
       const pending=writes.catch(()=>{}).then(publish);writes=pending;await pending;return value;

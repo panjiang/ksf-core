@@ -7,6 +7,7 @@ import { routingFixture } from './helpers/routing-fixture.js';
 import { enableChat, registerChatTurn, readChat, mutateChat, chatConfig } from '../src/services/chat.js';
 import { taskHook, enableCapture, declareTask } from '../src/services/tasks.js';
 import { runChatCommand } from '../src/commands/chat.js';
+import { syncChat } from '../src/services/chat-sync.js';
 import { listUserData } from '../src/services/user-data.js';
 import { DIRECTORY, CONFIG } from '../src/chat-state/storage.js';
 
@@ -25,6 +26,44 @@ function files(root) {
   function visit(path) { for (const e of readdirSync(path, { withFileTypes: true })) { const p = join(path, e.name); if (e.isDirectory()) visit(p); else result[p.slice(root.length)] = readFileSync(p, 'utf8'); } }
   visit(root); return result;
 }
+function nativeSource(f,extra={}) {
+  const home=join(f.root,'native'),path=join(home,'sessions','rollout-fixture-'+f.identity.sessionId+'.jsonl');mkdirSync(join(home,'sessions'),{recursive:true});
+  const meta={id:f.identity.sessionId,cwd:f.root,timestamp:'2026-01-02T00:00:00Z',...extra};
+  const save=(rows,override={})=>writeFileSync(path,[{type:'session_meta',payload:{...meta,...override}},...rows].map(r=>JSON.stringify(r)).join('\n')+'\n');
+  const start=(id,at='2026-01-02T00:00:01Z')=>({type:'event_msg',timestamp:at,payload:{type:'task_started',turn_id:id}});
+  const env={...f.env,CODEX_HOME:home};return{path,home,save,start,env,sync:()=>syncChat({root:f.root,env})};
+}
+test('explicit native synchronization registers real active boundaries without capturing bodies or implying adoption',async t=>{
+  const f=fixture(t),n=nativeSource(f);
+  n.save([n.start('old','2025-12-31T00:00:00Z'),n.start('one'),{type:'event_msg',payload:{type:'task_complete',turn_id:'one'}},n.start('two','2026-01-02T00:01:00Z'),{type:'response_item',payload:{type:'message',role:'user',content:[{type:'input_text',text:'PRIVATE_NATIVE_BODY_CANARY'}]}}]);
+  const original=readFileSync(n.path);assert.equal(f.read().system.turnId,null);
+  const result=await n.sync();assert.equal(result.registration,'native-transcript');assert.equal(result.context.system.turnId,'two');assert.equal(result.context.system.chatTurnNumber,2);assert.equal(result.context.abilities.length,0);
+  const before=files(join(f.root,DIRECTORY));await n.sync();assert.deepEqual(files(join(f.root,DIRECTORY)),before);assert.doesNotMatch(JSON.stringify(before),/PRIVATE_NATIVE_BODY_CANARY/);assert.deepEqual(readFileSync(n.path),original);
+  assert.equal(f.use('partner.test.a','two').system.abilityTurnNumber,1);
+  const cli=JSON.parse((await runChatCommand(['sync','--json'],f.root,{env:n.env})).stdout);assert.equal(cli.data.context.system.turnId,'two');
+});
+test('native first-turn synchronization preserves envelope precision beyond rounded started_at',async t=>{
+  const f=fixture(t),n=nativeSource(f,{timestamp:'2026-01-02T00:00:00.419Z'});
+  n.save([{type:'event_msg',timestamp:'2026-01-02T00:00:00.584Z',payload:{type:'task_started',turn_id:'first',started_at:1767312000}}]);
+  assert.equal((await n.sync()).context.system.chatTurnNumber,1);assert.equal(f.read().system.turnId,'first');
+});
+test('native synchronization rejects other roots, identity mismatch, internal workers and ambiguous sources without creating a ledger',async t=>{
+  const f=fixture(t),n=nativeSource(f);
+  for(const override of [{cwd:join(f.root,'other')},{id:'different-session'},{source:{subagent:'worker'}}]){n.save([n.start('one')],override);await assert.rejects(n.sync(),{code:'CHAT_SOURCE_IDENTITY'});assert.equal(f.read().system.turnId,null);}
+  n.save([n.start('one')]);mkdirSync(join(n.home,'archived_sessions'));writeFileSync(join(n.home,'archived_sessions','rollout-copy-'+f.identity.sessionId+'.jsonl'),readFileSync(n.path));await assert.rejects(n.sync(),{code:'CHAT_SOURCE_AMBIGUOUS'});assert.equal(f.read().system.turnId,null);
+});
+test('native synchronization rejects terminal, partial and unsupported sources and never initializes disabled tracking',async t=>{
+  const f=fixture(t),n=nativeSource(f);
+  for(const event of ['task_complete','turn_aborted','task_interrupted']){n.save([n.start('one'),{type:'event_msg',payload:{type:event,turn_id:'one'}}]);await assert.rejects(n.sync(),{code:'CHAT_TURN_UNAVAILABLE'});}
+  n.save([n.start('one')]);writeFileSync(n.path,readFileSync(n.path,'utf8')+'{"unfinished":');await assert.rejects(n.sync(),{code:'CHAT_SOURCE_PARTIAL'});
+  n.save([n.start(undefined)]);await assert.rejects(n.sync(),{code:'CHAT_SOURCE_UNSUPPORTED'});assert.equal(f.read().system.turnId,null);
+  const disabled=fixture(t,false),before=files(disabled.root);assert.equal((await syncChat({root:disabled.root,env:disabled.env})).reason,'disabled');assert.deepEqual(files(disabled.root),before);
+  assert.equal((await runChatCommand(['sync','--turn','invented','--json'],f.root,{env:n.env})).exitCode,2);
+});
+test('native synchronization excludes inherited fork boundaries and preserves an established creation baseline',async t=>{
+  const f=fixture(t),n=nativeSource(f,{parent_thread_id:'parent',timestamp:'2026-01-03T00:00:00Z'});n.save([n.start('inherited'),n.start('fresh','2026-01-04T00:00:00Z')]);
+  assert.equal((await n.sync()).context.system.chatTurnNumber,1);const before=files(join(f.root,DIRECTORY));n.save([n.start('fresh','2026-01-04T00:00:00Z')],{timestamp:'2026-01-03T01:00:00Z'});await assert.rejects(n.sync(),{code:'CHAT_SOURCE_IDENTITY'});assert.deepEqual(files(join(f.root,DIRECTORY)),before);
+});
 test('missing reads are read-only and never invent an identity or native count', t => {
   const f = fixture(t, false), before = files(f.root);
   assert.equal(f.read().system.chatTurnNumber, null);

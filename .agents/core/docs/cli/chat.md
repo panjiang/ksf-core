@@ -8,6 +8,7 @@
 
 ```sh
 .agents/ksf chat hooks --json
+.agents/ksf chat sync --json
 .agents/ksf chat read --json
 .agents/ksf chat context --json
 .agents/ksf chat read --object partner.example.research --fields current_step --json
@@ -22,6 +23,7 @@
 | 操作 | 参数与行为 |
 | --- | --- |
 | hooks | `[--json]`，启用轮次跟踪并保存首次 activatedAt，重复执行不重置基线，不导入历史或补算正在处理的轮次 |
+| sync | `[--json]`，显式核验当前宿主的本机原生来源并登记运行中的轮次，只提取轮次边界、不归档对话正文，不启用跟踪、不登记能力采用；无 Hook 触发的新会话也可沿此接入 |
 | read | `[--object <id>] [--fields <名称...>] [--json]`，缺省读公共变量；仅查询不登记轮次或采用 |
 | context | `[--json]`，只读预览与 Hook 相同的有界状态快照，不登记能力采用 |
 | use | `--object <id> --turn <nativeTurnId> [--dry-run] [--json]`，显式登记实际采用，同一能力同次运行同一原生轮次幂等 |
@@ -36,6 +38,8 @@
 CLI 使用 `CODEX_THREAD_ID`，通过既有根本地密钥派生与 taskId 相同的匿名 chatId；缺失身份不按 cwd、项目名或最近聊天猜测。内部服务接受明确的 `{host:"codex",sessionId}`，首版未自动接入其他宿主。密钥不能与已有聊天数据分离清理；缺失时拒绝生成新密钥来掩盖原状态。
 
 UserPromptSubmit 校验 transcript 元数据的会话、工作区及内部线程来源，登记当前原生 turnId。接入后的第一个原生轮次为 1；重复 Hook、同轮工具问答、PreCompact、Stop、Interrupt 不新增计数，已开始后中断的轮次保留。旧轮次重放不把当前轮回退。计数起点为本实例首次 chat hooks 的 activatedAt，不能把这个计数宣称为接入前的完整聊天历史。每次核对接入后原生轮次边界，可恢复漏掉的 Hook；只保存标识，不保存消息正文。压缩或来源缩短不删除已有登记。损坏记录、未知边界无法确认时报告计数缺口，不猜数。未收到可靠 Hook 时 read 返回 null 轮次；use/restart 拒绝未登记或非当前 turnId。
+
+应用工具创建的新会话或自动续跑可能没有 UserPromptSubmit。此时 read/context 仍只读已有账本，不能把旧轮次当作当前轮次；允许状态写入时显式 sync，通过当前 CODEX_THREAD_ID 核对唯一原生来源、工作区、创建基线和在运行的 task_started。完成、中断、未知边界、部分刷盘、内部 worker、来源歧义或身份不符均拒绝，不接受自填 turnId 或任意来源路径。返回 registration=native-transcript，区别于 Hook 注入；它只登记真实边界，后续 use 和 task declare 仍独立执行。跟踪关闭时不自动开启，只读/禁写任务不调用 sync。
 
 公共空间省略 `--object`，能力空间按完整三段 ID 隔离，涵盖四种能力类型；不带版本，不按来源或版本拆空间，不自动合并公共、对象长期设置或其他能力的变量。use 是 Agent 明确采用的声明，不证明能力已完成、真正理解或业务效果。普通对象 read、候选比较和变量写入不计能力参与。首次写能力变量但尚未 use 时，参与次数为 0。
 
@@ -76,6 +80,6 @@ read、context 和 dry-run 不创建状态、临时文件或写锁；共同启�
 
 Core 发行不携带真实聊天状态，升级/回滚保留原字节；它不是自动跨设备同步。变量历史界面、流程执行器、表达式和状态转换校验不在首版范围。
 
-主要错误：CHAT_IDENTITY_REQUIRED、CHAT_HOST_UNSUPPORTED、CHAT_TURN_UNAVAILABLE、CHAT_TURN_CONFLICT、CHAT_SOURCE_IDENTITY、CHAT_CONFLICT、CHAT_LOCKED、CHAT_DATA_INVALID、CHAT_VERSION_UNSUPPORTED、CHAT_CAPACITY、CHAT_CONTEXT_CAPACITY；安全文件层还会返回 USER_DATA_PATH_INVALID，身份密钥缺失返回 ROUTE_KEY_INVALID。
+主要错误：CHAT_SOURCE_UNAVAILABLE、CHAT_SOURCE_AMBIGUOUS、CHAT_IDENTITY_REQUIRED、CHAT_HOST_UNSUPPORTED、CHAT_TURN_UNAVAILABLE、CHAT_TURN_CONFLICT、CHAT_SOURCE_IDENTITY、CHAT_CONFLICT、CHAT_LOCKED、CHAT_DATA_INVALID、CHAT_VERSION_UNSUPPORTED、CHAT_CAPACITY、CHAT_CONTEXT_CAPACITY；安全文件层还会返回 USER_DATA_PATH_INVALID，身份密钥缺失返回 ROUTE_KEY_INVALID。
 
 实现为 `src/chat-state/`、`src/services/chat.js`、`src/commands/chat.js`，复用 `taskHook`。验证见 [chat.test.js](../../runtime/tests/chat.test.js)、[上下文专项](../../runtime/tests/chat-context.test.js)与[发行隔离测试](../../runtime/tests/chat-distribution.test.js)。程序验证、当前聊天实测与真正跨轮次验收分别记录，不互相替代。

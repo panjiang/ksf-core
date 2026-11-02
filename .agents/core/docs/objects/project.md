@@ -48,7 +48,7 @@
 
 一次简单请求不必自动创建项目。已有项目可以承接时，优先回到原项目，避免重复保存同一事实和进度。
 
-用户明确要求创建、导入、整理或补全时，由 runtime 按[项目接入与补全](../../abilities/competencies/project-intake/competency.md)组织专业处理。普通外部资料默认复制到项目并保留原件，工程原位关联，项目内材料原位整理；来源更新保留已有副本、报告差异，不覆盖或自动另存新版。根卡概述项目和直接材料分区，沿下级概览按需取得原文，不递归列举全库文件。日常任务缺少一个事实不自动触发持久补全，routing 偏好也不因本次采用某能力自动保存。
+用户明确要求创建、导入、整理或补全时，由 runtime 沿能力路由交给项目专业承接方，采用[项目规划](../../abilities/competencies/project-planning/competency.md)及其接入支持。普通外部资料默认复制到项目并保留原件，工程原位关联，项目内材料原位整理；来源更新保留已有副本、报告差异，不覆盖或自动另存新版。根卡概述项目和直接材料分区，沿下级概览按需取得原文，不递归列举全库文件。日常任务缺少一个事实不自动触发持久补全，routing 偏好也不因本次采用某能力自动保存。
 
 ## 存储与实现边界
 
@@ -56,12 +56,12 @@ KSF 内当前项目入口位于 `项目/`，项目档案入口位于固定 `档�
 
 新建实际工程的默认位置为用户根下的 `repositories/<工程名>/`，容器由父 KSF Git 忽略，工程各自独立管理 Git。已有工程原位关联；项目与工程可以多对多，不强制同名。根卡可选 `repositories` 路径列表由 [repository CLI](../cli/repository.md) 创建关联与核实；项目内路径相对根卡保存。只需目标与讨论时可以没有工程目录，实际代码、产品文档和成果正文留在工作区。
 
-项目从建立、活跃推进到完成或中止后收口；归档后退出默认活跃使用；归档与恢复通过项目 CLI 整体移动项目记录、保存 archive_history 并重定位结构化关联，普通 Markdown/Wikilink 由资产维护审阅修复。归档、解除关联或删除项目记录均保留工程原位及其 Git 历史，不自动物理搬迁工程。旧项目资料不随机制上线迁移。
+项目从建立、活跃推进到完成或中止后收口；归档后退出默认活跃使用；归档与恢复通过项目 CLI 整体移动项目记录、保存 archive_history 并重定位结构化关联，项目验收收口持有归档/物理恢复方法及有效入口复核，推进控制负责复工安排，通用资产维护提供写入保障。归档、解除关联或删除项目记录均保留工程原位及其 Git 历史，不自动物理搬迁工程。旧项目资料不随机制上线迁移。
 
 最小入口采用 `项目/<项目名>/project.md` 或 `档案/项目/<项目名>/project.md`，由普通 Markdown 保存上述必要内容；没有能力对象 ID、版本或 user_revision 的必填要求。名称和摘要可以使用已有元数据，没有时从标题与正文取得，不伪造缺失事实。已有领域资料通过根卡链接按需读取，不要求首版建立递归树或自动拆分机制。
 
 需要暂停、交接或长期继续的任务，在已授权范围内按[任务检查点](../runtime/task-checkpoints.md)保存到 `任务/<任务名>.md`；根卡只保留任务链接，工程正文继续留在工程。检查点保存当前步骤、采用定义、有效决定、授权来源、产物入口和下一步，不自动生成完整聊天或复制项目事实。恢复时核对现行文件和外部动作，未保存的信息保持未知。
 
-归属发现、继续任务、工程关联和读取方法由 [project-route](../../abilities/competencies/project-route/competency.md)持有；已授权写回由 [asset-maintenance](../../abilities/competencies/asset-maintenance/competency.md)处理。[project CLI](../cli/project.md)已提供 list/read/write/remove/check；项目正文与资料也可用宿主工具作已授权的局部编辑，通用 metadata CLI 仍可管理元数据。项目归属的语义判断由 Agent 完成，没有持久化自动绑定服务，项目不套用能力对象的 ID、版本与派生制度。
+归属与已有工程事实由 [project-route](../../abilities/competencies/project-route/competency.md)准备；建立及新工程安排、推进/恢复、验收/归档分别由三项项目基本功持有，已授权写入采用 [asset-maintenance](../../abilities/competencies/asset-maintenance/competency.md) 的通用保障。[project CLI](../cli/project.md)已提供 list/read/write/remove/check；项目正文与资料也可用宿主工具作已授权的局部编辑，通用 metadata CLI 仍可管理元数据。项目归属的语义判断由 Agent 完成，没有持久化自动绑定服务，项目不套用能力对象的 ID、版本与派生制度。
 
 返回[对象综述](overview.md)。相关对象：[协同](cooperation.md)、[知识](knowledge.md)、[基本功](competency.md)。

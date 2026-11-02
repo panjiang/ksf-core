@@ -1,7 +1,13 @@
 {
   "name": "@ksf/knowledge",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
-  "scripts": {"build": "node build.mjs"}
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "marked": "16.4.2",
+    "dompurify": "3.4.17"
+  }
 }

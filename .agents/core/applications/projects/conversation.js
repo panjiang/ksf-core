@@ -122,5 +122,5 @@ export function createConversationPanel(sdk,renderMarkdown){
   }
   render();
   const changed=()=>schedule(10),unsubscribe=sdk.subscribe?.(changed);document.addEventListener('visibilitychange',changed);
-  return {node,select,attach,setActive(value){active=value;if(value)schedule(10);else clearTimeout(timer);},dispose(){alive=false;generation++;clearTimeout(timer);unsubscribe?.();document.removeEventListener('visibilitychange',changed);node.remove();}};
+  return {node,select,attach,prefill(text){savedraft(draft?draft+'\n\n'+text:text);render();node.querySelector('textarea')?.focus();},setActive(value){active=value;if(value)schedule(10);else clearTimeout(timer);},dispose(){alive=false;generation++;clearTimeout(timer);unsubscribe?.();document.removeEventListener('visibilitychange',changed);node.remove();}};
 }

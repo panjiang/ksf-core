@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, realpathSync, symlinkSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { checkKnowledge } from '../src/services/knowledge-organize.js';
 import { objectMutation, objectQuery } from '../src/services/objects.js';
@@ -47,6 +47,17 @@ test('missing link is an observable failure; external, cross-root and dynamic ta
   assert.equal(result.errors[0].code, 'KNOWLEDGE_LINK_MISSING'); assert.equal(result.externalLinks, 1);
   assert.deepEqual(result.unchecked.map(r => r.reason), ['outside-root', 'dynamic-or-template']);
   assert.equal(result.anchorsUnchecked, 1);
+});
+
+test('native file URLs and line citations count as files while unknown schemes and outside-root URLs remain unchecked', t => {
+  const f = fixture(t), target = f.put('知识/目标 文件.md', '# 原文');
+  const url = pathToFileURL(target).href;
+  f.put('知识/knowledge.md', `[文件](${url})\n[定位](${url}:12:3)\n[未知](custom:entry)\n[根外](${pathToFileURL(join(f.root, '..', 'outside.md')).href})`);
+  const result = f.check();
+  assert.equal(result.valid, true, JSON.stringify(result.errors));
+  assert.equal(result.complete, true);
+  assert.equal(result.checkedLinks, 2);
+  assert.deepEqual(result.unchecked.map(r => r.reason), ['unsupported-scheme', 'outside-root']);
 });
 
 test('missing directory and read error are incomplete discovery, never an empty successful inventory', t => {

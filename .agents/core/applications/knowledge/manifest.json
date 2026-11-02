@@ -3,18 +3,31 @@
   "sdkVersion": 1,
   "id": "com.ksf.knowledge",
   "name": "KSF知识",
-  "version": "0.1.0",
-  "description": "KSF知识系统应用占位，当前提供空白窗口。",
+  "version": "0.2.1",
+  "description": "浏览、搜索、记录和修订现有知识原文，核对来源与链接并沿实例规则组织。",
   "author": "KSF",
   "icon": "knowledge",
-  "minCoreVersion": "0.3.2",
-  "permissions": [],
+  "minCoreVersion": "0.5.2",
+  "permissions": [
+    "filesystem"
+  ],
   "dataStores": [],
   "cards": [],
   "window": {
     "entry": "frontend/index.js",
     "multiInstance": true,
-    "defaultSize": {"width": 980, "height": 720},
-    "minSize": {"width": 480, "height": 320}
+    "defaultSize": {
+      "width": 980,
+      "height": 720
+    },
+    "minSize": {
+      "width": 480,
+      "height": 420
+    }
+  },
+  "backend": {
+    "runtime": "node",
+    "entry": "backend/index.mjs",
+    "lifecycle": "on-demand"
   }
 }

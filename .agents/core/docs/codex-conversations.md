@@ -52,7 +52,7 @@ IPC 使用 4 字节小端长度前缀，帧上限 64 MiB。快照绑定连接代
 
 现有档案接续通过原生 rollout 元信息核验 KSF 根、排除内部 worker，再以现有 `sessionKey(root,{host:"codex",sessionId:threadId})` 比对 taskId，且核验该项目的历史主归属。不按标题、时间或项目名称猜配。不使用 thread.sessionId 代替实际 threadId，分叉保持独立身份。
 
-KSF 正常从根 `AGENTS.md → ksf-runtime` 进入，能力发现、预设、核对和采用均由 Agent 现行规则处理。Core 只读取现有路由、`KSF_CHAT_STATE_V1` 对应状态与档案。原生 Hook 维护轮次，CAS 变量规则沿用 `ksf chat`；同轮 steer 不生成另一轮。缺少可靠 Hook 时显示 unconfirmed，不造轮次。项目正式聊天统计仍以已报告归属为准。
+KSF 正常从根 `AGENTS.md → ksf-runtime` 进入，能力发现、预设、核对和采用均由 Agent 现行规则处理。Core 只读取现有路由、`KSF_CHAT_STATE_V1` 对应状态与档案。原生 Hook 或显式 `chat sync` 校验来源后维护轮次，CAS 变量规则沿用 `ksf chat`；同轮 steer 不生成另一轮。缺少可靠原生登记时显示 unconfirmed，不造轮次；兼容字段 hookState=observed 表示本轮登记已核实，不单独证明宿主触发过 Hook。项目正式聊天统计仍以已报告归属为准。
 
 ## 兼容与验证
 

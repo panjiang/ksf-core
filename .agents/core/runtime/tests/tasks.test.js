@@ -27,6 +27,25 @@ function fixture(t) {
   const read = turnId => readTask({ root: f.root, taskId: id, turnId }).turn;
   return { ...f, home, path, env, id, append, start, message, receipt, output, sync, read };
 }
+test('native app-created task input is captured with delegated origin and ordinary tool wrappers stay excluded',async t=>{
+  const f=fixture(t),meta={id:f.env.CODEX_THREAD_ID,cwd:f.root,thread_source:'agent_created_thread'};
+  writeFileSync(f.path,JSON.stringify({type:'session_meta',payload:meta})+'\n');
+  f.append({type:'event_msg',timestamp:'2026-01-02T00:00:00Z',payload:{type:'task_started',turn_id:'one',turn_attribution:{turn_trigger:'app_tool_create_thread'}}});
+  const wrapper='<codex_delegation>\n<source_thread_id>parent-thread</source_thread_id>\n<input>请核对真实项目\n原文保持。</input>\n</codex_delegation>';
+  f.append({type:'response_item',timestamp:'2026-01-02T00:00:01Z',payload:{type:'function_call_output',id:'native-input',namespace:'codex_app',name:'create_thread',output:wrapper,internal_chat_message_metadata_passthrough:{turn_id:'one',create_time:1767312001}}});
+  f.append({type:'response_item',timestamp:'2026-01-02T00:00:02Z',payload:{type:'function_call_output',id:'quoted',namespace:'other',name:'create_thread',output:wrapper}});
+  f.message('answer','assistant','已核对','final_answer');f.append({type:'event_msg',timestamp:'2026-01-02T00:00:03Z',payload:{type:'task_complete',turn_id:'one'}});
+  await f.sync();const turn=f.read('one');assert.equal(turn.status,'completed');assert.equal(turn.messages.filter(m=>m.role==='user').length,1);assert.equal(turn.messages[0].phase,'delegated_input');assert.equal(turn.messages[0].origin.kind,'codex-app-create-thread');assert.equal(turn.messages[0].content[0].text,'请核对真实项目\n原文保持。');
+  f.start('two');f.append({type:'response_item',timestamp:'2026-01-02T00:00:02Z',payload:{type:'function_call_output',id:'ordinary-output',namespace:'codex_app',name:'create_thread',output:wrapper}});await f.sync();assert(!f.read('two').messages.some(m=>m.id==='ordinary-output'));
+});
+test('delegated inputs obey explicit capture exclusions and do not cross the activation baseline',async t=>{
+  const f=fixture(t);writeFileSync(f.path,JSON.stringify({type:'session_meta',payload:{id:f.env.CODEX_THREAD_ID,cwd:f.root,thread_source:'agent_created_thread'}})+'\n');
+  for(const [id,at]of [['old','2025-12-31T00:00:00Z'],['excluded','2026-01-02T00:00:00Z']]){
+    f.append({type:'event_msg',timestamp:at,payload:{type:'task_started',turn_id:id,turn_attribution:{turn_trigger:'app_tool_create_thread'}}});
+    f.append({type:'response_item',timestamp:at,payload:{type:'function_call_output',id:'native-'+id,namespace:'codex_app',name:'create_thread',output:'<codex_delegation><source_thread_id>parent</source_thread_id><input>PRIVATE_DELEGATED_CANARY</input></codex_delegation>'}});
+  }
+  f.output(f.receipt('excluded','exclude-this','exclude'));await f.sync();assert.equal(f.read('old'),null);assert.equal(f.read('excluded').messages.length,0);assert.doesNotMatch(readFileSync(join(f.root,turnPath(f.id,'excluded')),'utf8'),/PRIVATE_DELEGATED_CANARY/);
+});
 test('global archive pause never backfills disabled turns after restart and preserves chat privacy state',async t=>{
  const f=fixture(t);f.start('before','2026-01-02T00:00:00Z');f.message('before-u','user','保留旧正文');await f.sync();
  configureCapture({root:f.root,enabled:false,at:'2026-01-03T00:00:00Z'});

@@ -109,7 +109,7 @@ export function objectQuery({ root, type, operation, reference, source = 'effect
   return { data: { object: view(row, part), references }, errors: references.filter(r => r.error).map(r => r.error) };
 }
 
-export function objectMutation({ root, type, operation, id, input = {}, dryRun = false }, { beforePublish, cleanup } = {}) {
+export function objectMutation({ root, type, operation, id, input = {}, dryRun = false, ifMatch }, { beforePublish, cleanup } = {}) {
   if (type === 'workflow') fail('OBJECT_TYPE_RENAMED', 'Use the cooperation type; migrate existing data with ksf cooperation migrate --apply.', { replacement: 'cooperation', exitCode: 2 });
   if (!Object.hasOwn(types, type) || !['write', 'remove'].includes(operation) || typeof dryRun !== 'boolean') fail('INVALID_ARGUMENTS', 'Invalid object mutation.', { exitCode: 2 });
   if (operation === 'write') validateObjectInput(input);
@@ -119,6 +119,9 @@ export function objectMutation({ root, type, operation, id, input = {}, dryRun =
   if (Object.hasOwn(protectedPaths, id)) fail('OBJECT_PROTECTED', 'Fixed system entries cannot be derived, modified or deleted by object commands.', { id });
   const action = () => {
     const state = loadObjectState({ root, type, operation, id }, input);
+    if (ifMatch !== undefined && (typeof ifMatch !== 'string' || ifMatch !== (state.base?.digest ?? 'missing'))) {
+      fail('OBJECT_CONFLICT', 'Object changed since it was read. Reload and compare before saving.', { id });
+    }
     const plan = planObjectChange(state, { input, dryRun });
     if (!dryRun && plan.changed) commitObjectChange(state, plan, { beforePublish, cleanup });
     return { data: plan.result, errors: [] };

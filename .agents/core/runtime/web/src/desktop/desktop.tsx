@@ -122,10 +122,11 @@ export function Desktop() {
   }, [apply, writeURL]);
   const openApp = useCallback((appId: string, search = '', fresh = false, fixedId?: string, deep = false, cloneFrom?: string) => {
     const def = apps.find(a => a.id === appId); if (!def) return;
+    const explicitSearch = search.replace(/^\?/, '').length > 0;
     search = appSearch(appId, search);
     const resource = resourceKey(appId, search);
     const existing = (!fresh || !def.multiInstance) && windowsRef.current.filter(w => w.appId === appId && (!def.multiInstance || !resource || resourceKey(appId, w.search) === resource)).sort((a, b) => b.z - a.z)[0];
-    if (existing) { apply(list => list.map(w => w.id === existing.id ? { ...w, minimized: false } : w)); activeRef.current = null; activate(existing.id); return; }
+    if (existing) { apply(list => list.map(w => w.id === existing.id ? { ...w, minimized: false, ...(explicitSearch ? {search} : {}) } : w)); activeRef.current = null; activate(existing.id); return; }
     const id = fixedId ?? `window-${randomId()}`, a = getArea(), base = appId === 'com.ksf.conversations' ? prefsRef.current.bounds : { ...prefsRef.current.bounds, ...def.defaultSize }, cascade = windowsRef.current.length % 5 * 24;
     const bounds = fitBounds({ ...base, x: base.x + cascade, y: base.y + cascade }, a, def.minSize);
     if (cloneFrom) cloneWindowSession(cloneFrom, id);

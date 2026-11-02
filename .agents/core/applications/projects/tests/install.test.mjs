@@ -4,9 +4,10 @@ import {mkdtemp,mkdir,readFile,writeFile,rm,copyFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createApplicationManager} from '../../../runtime/src/applications/manager.js';
-import {DEFAULT_APPLICATIONS,decodePackage} from '../../../runtime/src/applications/protocol.js';
+import {DEFAULT_APPLICATIONS,decodePackage,assertCompatible} from '../../../runtime/src/applications/protocol.js';
 import {managedPath} from '../../../runtime/src/distribution/paths.js';
 import {project} from '../../../runtime/src/services/projects.js';
+import {projectManagement} from '../../../runtime/src/services/project-management.js';
 
 const sourceStore=new URL('../../store/',import.meta.url);
 test('Core project source is distributable; bundled package upgrades the old identity and installs offline by default',async t=>{
@@ -15,7 +16,8 @@ test('Core project source is distributable; bundled package upgrades the old ide
   assert(!managedPath('.agents/core/applications/projects/node_modules/marked/lib/marked.esm.js'));
   const index=JSON.parse(await readFile(new URL('index.json',sourceStore),'utf8'));
   const previous=index.apps.find(e=>e.manifest.id==='com.ksf.projects'&&e.manifest.version==='0.2.9');
-  const current=index.apps.find(e=>e.manifest.id==='com.ksf.projects'&&e.manifest.version==='0.2.11');assert(previous&&current);assert.equal(current.manifest.name,'KSF项目');
+  const current=index.apps.find(e=>e.manifest.id==='com.ksf.projects'&&e.manifest.version==='0.3.3');assert(previous&&current);assert.equal(current.manifest.name,'KSF项目');
+  for(const [id,version]of [['com.ksf.projects','0.3.3'],['com.ksf.conversations','0.3.4'],['com.ksf.knowledge','0.2.1'],['com.ksf.abilities','0.2.1']]){const entry=index.apps.find(e=>e.manifest.id===id&&e.manifest.version===version);assert(entry);assert.equal(entry.manifest.minCoreVersion,'0.5.2');assert.throws(()=>assertCompatible(entry.manifest,{coreVersion:'0.5.1'}),{code:'APP_CORE_INCOMPATIBLE'});assert.doesNotThrow(()=>assertCompatible(entry.manifest,{coreVersion:'0.5.2'}));}
   const bytes=await readFile(new URL(current.package.url,sourceStore)),pkg=decodePackage(bytes);
   assert(pkg.files.get('frontend/THIRD_PARTY_NOTICES.txt').data.toString().includes('## marked@16.4.2'));
   const root=await mkdtemp(join(tmpdir(),'ksf-core-projects-')),store=join(root,'store');await mkdir(store);let manager;
@@ -25,11 +27,11 @@ test('Core project source is distributable; bundled package upgrades the old ide
   const projectText='---\nname: 示例\nstatus: active\n---\n# 示例\n';await writeFile(join(root,'项目/示例/project.md'),projectText);
   const stub=`#!${process.execPath}\nconst args=process.argv.slice(2);const project={name:'示例',scope:'current',directory:'项目/示例',path:'项目/示例/project.md',metadata:{name:'示例',status:'active'},body:'# 示例'};console.log(JSON.stringify({ok:true,data:args[1]==='read'?{project}:{projects:[{name:'示例',title:'示例',scope:'current'}]},errors:[]}));`;
   await writeFile(join(root,'.agents/ksf'),stub,{mode:0o755});
-  const start=()=>createApplicationManager(root,{storeDirectory:store,defaultSource:null,services:{projects:{list:input=>project({root,operation:'list',scope:input.scope}),read:input=>project({root,operation:'read',...input})}},fetcher:async()=>{throw Error('Network forbidden');}});
+  const start=()=>createApplicationManager(root,{storeDirectory:store,defaultSource:null,services:{projects:{managementRead:input=>projectManagement({root,operation:'read',...input}),managementWrite:input=>projectManagement({root,operation:'write',...input}),managementCheck:input=>projectManagement({root,operation:'check',...input}),list:input=>project({root,operation:'list',scope:input.scope}),read:input=>project({root,operation:'read',...input})}},fetcher:async()=>{throw Error('Network forbidden');}});
   await publish([previous]);manager=start();let snapshot=await manager.snapshot();assert(snapshot.installed.some(a=>a.id==='com.ksf.projects'));
   let instance=await manager.launch('com.ksf.projects',previous.package.sha256);await manager.call(instance.id,'preferences.save',{selected:'current:示例',tab:'tasks'});await manager.release(instance.id);await manager.close();
   await publish([previous,current]);manager=start();await manager.install({trusted:true,sourceId:'builtin',appId:current.manifest.id,version:current.manifest.version,digest:current.package.sha256});
   instance=await manager.launch(current.manifest.id,current.package.sha256);assert.equal((await manager.call(instance.id,'preferences.read')).tab,'tasks');assert.equal((await manager.call(instance.id,'list')).projects[0].name,'示例');
-  const detail=await manager.call(instance.id,'detail',{name:'示例',scope:'current'});assert.equal(detail.title,'示例');await manager.release(instance.id);await manager.close();
+  const detail=await manager.call(instance.id,'detail',{name:'示例',scope:'current'});assert.equal(detail.title,'示例');const management=await manager.call(instance.id,'management.read',{name:'示例',scope:'current'});assert.equal(management.state,'missing');management.plan.purpose='离线安装后保存';const saved=await manager.call(instance.id,'management.write',{name:'示例',scope:'current',data:{plan:management.plan,ifMatch:management.etag,operationId:'install-test-save'}});assert.equal(saved.revision,1);assert.equal(JSON.parse(await readFile(join(root,'项目/示例/项目管理.json'),'utf8')).plan.purpose,'离线安装后保存');await manager.release(instance.id);await manager.close();
   const fresh=await mkdtemp(join(tmpdir(),'ksf-core-projects-fresh-'));t.after(()=>rm(fresh,{recursive:true,force:true}));manager=createApplicationManager(fresh,{storeDirectory:store,defaultSource:null,fetcher:async()=>{throw Error('Network forbidden');}});snapshot=await manager.snapshot();const installed=snapshot.installed.find(a=>a.id===current.manifest.id);assert.equal(installed.active.manifest.version,current.manifest.version);assert.equal(installed.active.manifest.name,'KSF项目');assert.equal(await readFile(join(root,'项目/示例/project.md'),'utf8'),projectText);
 });

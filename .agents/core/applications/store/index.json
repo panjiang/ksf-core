@@ -3053,6 +3053,315 @@
           }
         ]
       }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.ksf.projects",
+        "name": "KSF项目",
+        "version": "0.3.3",
+        "description": "从目标和阶段成果推进项目，管理工作承诺、依赖、风险、决定与证据验收，保留原始检查点和 Desktop 对话。",
+        "author": "KSF",
+        "icon": "package",
+        "sdkVersion": 1,
+        "backend": {
+          "runtime": "node",
+          "entry": "backend/index.mjs",
+          "lifecycle": "on-demand"
+        },
+        "permissions": [
+          "filesystem",
+          "shell",
+          "codex-conversations"
+        ],
+        "window": {
+          "entry": "frontend/index.js",
+          "styles": [
+            "frontend/assets/projects-Cbkk8_Oc.css"
+          ],
+          "multiInstance": true,
+          "defaultSize": {
+            "width": 1180,
+            "height": 760
+          },
+          "minSize": {
+            "width": 540,
+            "height": 420
+          }
+        },
+        "minCoreVersion": "0.5.2",
+        "dataStores": [
+          {
+            "name": "conversations.json",
+            "scope": "user",
+            "schemaVersion": 1,
+            "migrateFrom": []
+          },
+          {
+            "name": "preferences.json",
+            "scope": "user",
+            "schemaVersion": 1,
+            "migrateFrom": []
+          }
+        ]
+      },
+      "package": {
+        "url": "com.ksf.projects-0.3.3.ksfapp",
+        "sha256": "651e25bebdd1c63831bb2ebe0d6320e6168033d120d141cb87255720c83edd30",
+        "size": 252722
+      },
+      "listing": {
+        "subtitle": "从阶段成果，推进到证据验收。",
+        "description": "在同一份项目计划中管理目标、阶段、工作承诺、依赖、风险、决定与验收。\n\n总览呈现可做事项及原因、阻塞、待决和验收差距；保留原始检查点、资料和 Desktop 项目对话。未接入的项目不自动写入。",
+        "releaseNotes": "新增完整项目管理视图、结构化编辑、证据验收、并发草稿合并和显式检查点接入；与 Agent CLI 共用项目主件。",
+        "screenshots": [
+          {
+            "url": "media/6cfb39a1dae38ae6f2e1b80d56e5c69fa3ddf3d4c7351e417ed1fe3ccd573b35.jpg",
+            "sha256": "6cfb39a1dae38ae6f2e1b80d56e5c69fa3ddf3d4c7351e417ed1fe3ccd573b35",
+            "size": 55675,
+            "alt": "虚构工作坊项目的阶段成果、可做事项、风险与待决"
+          }
+        ]
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.ksf.conversations",
+        "name": "KSF飞轮",
+        "version": "0.3.4",
+        "description": "汇聚工作记录、回顾结果与改进建议，推动项目、知识和能力持续积累。",
+        "author": "KSF",
+        "icon": "flywheel",
+        "sdkVersion": 1,
+        "window": {
+          "entry": "frontend/index.js",
+          "multiInstance": true,
+          "defaultSize": {
+            "width": 1180,
+            "height": 740
+          },
+          "minSize": {
+            "width": 480,
+            "height": 420
+          },
+          "styles": [
+            "frontend/assets/conversations-U4NZtzWC.css"
+          ]
+        },
+        "cards": [
+          {
+            "id": "work-stats",
+            "name": "工作统计",
+            "description": "今日／本周横向统计，列出今日项目、知识和能力，点击核对明细",
+            "icon": "work-stats",
+            "entry": "frontend/cards/work-stats.js",
+            "defaultSize": {
+              "w": 4,
+              "h": 2
+            },
+            "minSize": {
+              "w": 1,
+              "h": 1
+            },
+            "styles": [
+              "frontend/assets/conversations-U4NZtzWC.css"
+            ]
+          }
+        ],
+        "backend": {
+          "runtime": "node",
+          "entry": "backend/index.mjs",
+          "lifecycle": "resident"
+        },
+        "permissions": [
+          "filesystem",
+          "background",
+          "ai",
+          "codex-conversations"
+        ],
+        "minCoreVersion": "0.5.2",
+        "dataStores": [],
+        "cli": {
+          "contractVersion": 1,
+          "entry": "cli/index.mjs",
+          "documentation": "docs/cli.md",
+          "commands": [
+            {
+              "id": "overview",
+              "description": "回顾概览与运行状态"
+            },
+            {
+              "id": "profiles",
+              "description": "可用执行配置"
+            },
+            {
+              "id": "configure",
+              "description": "设置自动回顾"
+            },
+            {
+              "id": "generate",
+              "description": "生成指定日期报告"
+            },
+            {
+              "id": "report",
+              "description": "读取报告"
+            },
+            {
+              "id": "confirm",
+              "description": "用户审阅并归档"
+            },
+            {
+              "id": "resume",
+              "description": "恢复原运行"
+            },
+            {
+              "id": "suggestions",
+              "description": "查询建议"
+            },
+            {
+              "id": "suggestion",
+              "description": "更新建议状态"
+            },
+            {
+              "id": "chats",
+              "description": "按归档状态查询聊天"
+            },
+            {
+              "id": "restore",
+              "description": "恢复对话"
+            },
+            {
+              "id": "retry",
+              "description": "显式重试已确认失败的任务"
+            },
+            {
+              "id": "handoff",
+              "description": "读取带来源与版本的改进处理草稿，不启动执行"
+            }
+          ]
+        }
+      },
+      "package": {
+        "url": "com.ksf.conversations-0.3.4.ksfapp",
+        "sha256": "608a0139934b5634c5eabc0af574ecbacc8796a864e725f3d562a057bb26739a",
+        "size": 446202
+      },
+      "listing": {
+        "subtitle": "回顾工作，落实改进，观察后续结果。",
+        "description": "按工作事项回顾当天的进展、成果和证据，提出能力复用及现有资产的改进建议。用户审阅后，归档已结束且证据完整的对话。\n\n保留原始请求、路由、结果和历史搜索；建议跨日期集中跟踪。支持每日自动生成、手动补做、后台恢复与工作统计卡片。",
+        "releaseNotes": "支持按准确聊天来源生成回顾，重新核对保持范围且不替代全局日报；CLI 可读取带版本的改进处理草稿。保留现有报告、配置、建议落实与来源撤回边界。 修正公共 CLI params 信封解析，保留旧顶层调用并拒绝歧义混用。",
+        "screenshots": [
+          {
+            "url": "media/75c23637875d8307d21a102dc2cd2d2038f9a13be1725b67fdcc7e0312c47bde.jpg",
+            "sha256": "75c23637875d8307d21a102dc2cd2d2038f9a13be1725b67fdcc7e0312c47bde",
+            "size": 58587,
+            "alt": "查看归属聊天、完整轮次与原始结果"
+          },
+          {
+            "url": "media/6dc324acfaf7de130031105d6288036b712c7acca04a382eca182e39369b4175.jpg",
+            "sha256": "6dc324acfaf7de130031105d6288036b712c7acca04a382eca182e39369b4175",
+            "size": 85378,
+            "alt": "工作统计卡片；虚构桌面同时展示两种示例卡片"
+          }
+        ]
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "sdkVersion": 1,
+        "id": "com.ksf.knowledge",
+        "name": "KSF知识",
+        "version": "0.2.1",
+        "description": "浏览、搜索、记录和修订现有知识原文，核对来源与链接并沿实例规则组织。",
+        "author": "KSF",
+        "icon": "knowledge",
+        "minCoreVersion": "0.5.2",
+        "permissions": [
+          "filesystem"
+        ],
+        "dataStores": [],
+        "cards": [],
+        "window": {
+          "entry": "frontend/index.js",
+          "multiInstance": true,
+          "defaultSize": {
+            "width": 980,
+            "height": 720
+          },
+          "minSize": {
+            "width": 480,
+            "height": 420
+          },
+          "styles": [
+            "frontend/assets/knowledge-DaylOc7M.css"
+          ]
+        },
+        "backend": {
+          "runtime": "node",
+          "entry": "backend/index.mjs",
+          "lifecycle": "on-demand"
+        }
+      },
+      "package": {
+        "url": "com.ksf.knowledge-0.2.1.ksfapp",
+        "sha256": "48ca0803ba2c3b8f52e2bdbe84b19487d70aa7eac569c169d8e60c3e42f69ede",
+        "size": 129015
+      },
+      "listing": {
+        "subtitle": "知识原文、来源和修订的工作入口。",
+        "description": "直接使用现有资产；应用不建立第二份能力正文或知识结论。支持检索、阅读、显式维护、版本冲突保护与来源回看。",
+        "releaseNotes": "从空白占位升级为实际资产工作台；与项目和飞轮保留原件关联。"
+      }
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "sdkVersion": 1,
+        "id": "com.ksf.abilities",
+        "name": "KSF能力",
+        "version": "0.2.1",
+        "description": "发现、读取、维护和检查现有能力定义，保留有效来源、精确引用与用户派生。",
+        "author": "KSF",
+        "icon": "abilities",
+        "minCoreVersion": "0.5.2",
+        "permissions": [
+          "filesystem"
+        ],
+        "dataStores": [],
+        "cards": [],
+        "window": {
+          "entry": "frontend/index.js",
+          "multiInstance": true,
+          "defaultSize": {
+            "width": 980,
+            "height": 720
+          },
+          "minSize": {
+            "width": 480,
+            "height": 420
+          },
+          "styles": [
+            "frontend/assets/abilities-DaylOc7M.css"
+          ]
+        },
+        "backend": {
+          "runtime": "node",
+          "entry": "backend/index.mjs",
+          "lifecycle": "on-demand"
+        }
+      },
+      "package": {
+        "url": "com.ksf.abilities-0.2.1.ksfapp",
+        "sha256": "ad1c0d54b055e5cb48b85d878a52f5ffcd7c774c7945f34a02ee6eb298107aff",
+        "size": 129011
+      },
+      "listing": {
+        "subtitle": "现有能力定义与来源的工作入口。",
+        "description": "直接使用现有资产；应用不建立第二份能力正文或知识结论。支持检索、阅读、显式维护、版本冲突保护与来源回看。",
+        "releaseNotes": "从空白占位升级为实际资产工作台；与项目和飞轮保留原件关联。"
+      }
     }
   ]
 }

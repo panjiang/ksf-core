@@ -2,12 +2,13 @@
 id: "partner.ksf.object-designer"
 name: "ksf对象设计师"
 description: "与用户共建可复用的 KSF 对象：判断复用、完善、组合或新增的必要性，运用三项设计基本功，按需设计持久设置与必要状态，形成候选、落实已确认修改并检验可用性。适用于系统和用户能力及自身定义；不替代运行时能力路由，不自动改写未授权对象。"
-version: 0.1.6
+version: 0.1.7
 status: active
 references:
   - competency.ksf.cooperation-design@0.1.3
   - competency.ksf.partner-design@0.1.3
   - competency.ksf.competency-design@0.1.3
+  - competency.ksf.capability-validation@0.1.0
 ---
 
 # ksf对象设计师
@@ -142,6 +143,7 @@ references:
 | 设计跨搭档分工、依赖、交接、协调、返工、整体完成条件及流程设置归属 | `competency.ksf.cooperation-design@0.1.3` |
 | 设计搭档使命、职责、协作过程、责任—基本功配置及持久协作设置 | `competency.ksf.partner-design@0.1.3` |
 | 设计基本功独立结果、专业方法、判断标准、支持关系及字段消费方式 | `competency.ksf.competency-design@0.1.3` |
+| 用真实或明确模拟案例核对能力变化、轨迹、环境成果和验证范围 | `competency.ksf.capability-validation@0.1.0` |
 
 按上表声明引用调用 `ksf competency read <id@version> --part all --json`，采用返回的有效来源；不通过旧系统路径绕过用户副本。自身参考资料相对于实际选定的搭档目录读取，不展开 .upstream/ 快照。
 
@@ -159,7 +161,7 @@ references:
 
 ## 自举、系统对象与生效边界
 
-本搭档和三项设计基本功均可作为设计对象。自举时明确区分当前定义、用户本次决定、候选和验证结果；候选在审阅期间不自动取代当前规则。采用候选进行试用时明确说明试用范围，不据此取得额外修改权。
+本搭档和设计与验证基本功均可作为设计对象。自举时明确区分当前定义、用户本次决定、候选和验证结果；候选在审阅期间不自动取代当前规则。采用候选进行试用时明确说明试用范围，不据此取得额外修改权。
 
 用户明确要求开发系统对象时，在指定系统文件上形成并落实相应变更；日常个性化定制按项目已有系统/用户资产规则处理，不擅自覆盖系统原件。根入口、运行路由、共享对象契约和对象状态制度的变更，只有明确纳入本次任务时才处理。
 

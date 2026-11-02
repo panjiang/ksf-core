@@ -186,3 +186,24 @@ recover 在项目锁内核对实际所在目录、文件库存、原始或预期
 常见新增错误：PROJECT_DESTINATION_EXISTS、PROJECT_ARCHIVED_EXISTS、PROJECT_TRANSITION_PENDING、PROJECT_CONFLICT、PROJECT_EMBEDDED_REPOSITORY、PROJECT_LINK_RELOCATION_UNSUPPORTED、PROJECT_CROSS_DEVICE、PROJECT_RESOURCE_BUSY、PROJECT_TRANSITION_FAILED。失败回执包含可用的 recoveryId/recoveryPath；不得从退出码推断一定没有变更。
 
 旧 routing.knowledge 在 read/list 中原样保留，正文及无关元数据维护可以保留未变旧值；新增或修改 routing 时按 PROJECT_ROUTING_INVALID 拒绝，issues 内含 PROJECT_ROUTING_KNOWLEDGE_REMOVED。归档/恢复同样先验证 routing，须先清理旧字段，失败不产生部分移动。程序不自动改写现有项目，旧字段的路径不再重算。
+
+## 项目管理主件
+
+`project management` 管理根卡旁的一份 `项目管理.json`，完整职责与模型见[共同契约](../project-management.md)。读取缺失文件返回空投影与 `etag: missing`，不初始化；旧检查点、项目正文与聊天保持原位。
+
+```sh
+.agents/ksf project management read "项目名" --json
+.agents/ksf project management check "项目名" --from "计划输入.json" --json
+.agents/ksf project management write "项目名" --from "计划输入.json" --dry-run --json
+.agents/ksf project management write "项目名" --from "计划输入.json" --json
+```
+
+read 支持 current/archived，write 只支持 current。check 的输入可为 plan 或 `{plan}`；write 输入为 `{plan,ifMatch,operationId}`。ifMatch 使用最近 read 返回的摘要，首次创建为 missing；operationId 为调用方预先保存的 8–128 字符字母/数字/下划线/短横线标识。输入文件路径沿普通 project write 的规则解析；不隐式读取标准输入。
+
+read 返回 state/path/etag/revision/updatedAt/plan/warnings/projection；projection 包含各事项记录层面的 readiness/reasons、ready、在制数量/容量、状态计数与验收缺口。程序不判断业务价值、真实权限或证据语义。check 不写文件，缺失引用/循环/无证据完成等返回具体字段错误；读取已保存主件时，外部证据或来源失效保留内容并警告，不以空计划覆盖。
+
+写入与归档共用项目锁，单文件临时刷盘后原子发布；并发版本变化返回 PROJECT_PLAN_CONFLICT，保留调用方草稿，读最新后合并。同一最近操作号同内容重放返回 replayed；同号不同内容返回 PROJECT_PLAN_OPERATION_CONFLICT。只保留最近一次写入回执：若后续操作已生效，旧操作重试仍受 ifMatch 保护，调用方应读当前内容对账，不能假定无限历史幂等。
+
+损坏/未来格式、符号链接、越界、本地证据不可读取、归档项目写入明确失败。HTTP(S) 证据仅校验 URL 结构，不联网证明内容；本地证据限定当前 KSF 内普通文件，不开放运行数据或身份。文件上限 1 MiB，每类条目最多 500 项。
+
+应用 SDK 的公共 `projects` 服务提供 `managementRead`、`managementCheck`、`managementWrite`，参数同服务的 `{name,scope,data?,dryRun?}`，返回 `{data,errors}`；宿主固定当前 workspace，不接受调用方切换根。后端调用通过 `context.services.call('projects','managementRead',[{name,scope}])`，需 filesystem 权限。应用不导入 Core 内部模块。

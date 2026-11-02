@@ -101,7 +101,10 @@ export function checkKnowledge({ root, target = '知识' }, { readText = p => re
     let value;
     try { value = /^file:/i.test(link.target) ? fileURLToPath(link.target) : decodeURIComponent(link.target.split('#')[0].split('?')[0]); }
     catch (error) { issue({ code: 'KNOWLEDGE_LINK_INVALID', message: error.message }, link.from, at); continue; }
-    if (/^[a-z][a-z\d+.-]*:/i.test(value)) { unchecked.push({ ...at, reason: 'unsupported-scheme' }); continue; }
+    // Codex local file citations may append a line (and optional column).
+    // Validate file existence separately; a suffix does not prove that line exists.
+    value = value.replace(/:(\d+)(?::\d+)?$/, '');
+    if (!isAbsolute(value) && /^[a-z][a-z\d+.-]*:/i.test(value)) { unchecked.push({ ...at, reason: 'unsupported-scheme' }); continue; }
     // Obsidian paths are vault-root-relative; an explicitly relative path is local.
     const candidates = link.kind === 'wiki' && !isAbsolute(value) && !value.startsWith('.')
       ? [resolve(base, value), resolve(dirname(link.from), value)] : [resolve(dirname(link.from), value)];
@@ -120,5 +123,5 @@ export function checkKnowledge({ root, target = '知识' }, { readText = p => re
   }
   return { valid: errors.length === 0, complete, root: base, target: portable(relative(base, folder)) || '.', files,
     checkedLinks: checked, externalLinks: external, anchorsUnchecked, unchecked, errors,
-    limits: ['file existence only; anchors, semantics and external sources are not validated', 'no implicit directory model; no symbolic-link traversal', 'working/cache/hidden trees excluded'] };
+    limits: ['file existence only; anchors, semantics and external sources are not validated', 'no implicit directory model; no symbolic-link traversal', 'working/cache/hidden trees excluded', 'line and column suffixes are ignored; referenced positions are not validated'] };
 }

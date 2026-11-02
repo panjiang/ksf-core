@@ -369,6 +369,7 @@ export function createApplicationManager(root, { storeDirectory = bundledStore, 
         assert(typeof action==='function'&&Object.hasOwn(service,message.method),'APP_SERVICE_UNKNOWN','应用请求了未知公共服务。');
         if(message.service==='terminal'){assert(['create','list','read','write','resize','close'].includes(message.method)&&runtime.release.manifest.permissions.includes('shell'),'APP_PERMISSION_REQUIRED','此应用没有声明 shell 权限。',403);assert(runtime.clients.has(message.caller?.instanceId)&&!instances.get(message.caller.instanceId)?.closed,'APP_PROCESS_EXITED','终端窗口租约已失效。',410);}
         if(message.service==='storage')assert(['read','write','inspect','migrate'].includes(message.method),'APP_SERVICE_UNKNOWN','未知存储方法。');
+        if(message.service==='assets')assert(runtime.release.manifest.permissions.includes('filesystem'),'APP_PERMISSION_REQUIRED','此应用没有声明资产访问所需的 filesystem 权限。',403);
         if(message.service==='capabilities')assert(message.method==='read'&&runtime.release.manifest.permissions.includes('filesystem'),'APP_PERMISSION_REQUIRED','此应用没有声明能力读取所需的 filesystem 权限。',403);
         if(message.service==='tasks'&&message.method!=='activity')assert(runtime.release.manifest.permissions.includes('filesystem'),'APP_PERMISSION_REQUIRED','此应用没有声明证据读取所需的 filesystem 权限。',403);
         if(message.service==='projects')assert(runtime.release.manifest.permissions.includes('filesystem')||runtime.release.manifest.permissions.includes('projects.read')&&['list','read'].includes(message.method),'APP_PERMISSION_REQUIRED','此应用没有声明 filesystem 权限。',403);

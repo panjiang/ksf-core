@@ -3,18 +3,31 @@
   "sdkVersion": 1,
   "id": "com.ksf.abilities",
   "name": "KSF能力",
-  "version": "0.1.0",
-  "description": "KSF能力系统应用占位，当前提供空白窗口。",
+  "version": "0.2.1",
+  "description": "发现、读取、维护和检查现有能力定义，保留有效来源、精确引用与用户派生。",
   "author": "KSF",
   "icon": "abilities",
-  "minCoreVersion": "0.3.2",
-  "permissions": [],
+  "minCoreVersion": "0.5.2",
+  "permissions": [
+    "filesystem"
+  ],
   "dataStores": [],
   "cards": [],
   "window": {
     "entry": "frontend/index.js",
     "multiInstance": true,
-    "defaultSize": {"width": 980, "height": 720},
-    "minSize": {"width": 480, "height": 320}
+    "defaultSize": {
+      "width": 980,
+      "height": 720
+    },
+    "minSize": {
+      "width": 480,
+      "height": 420
+    }
+  },
+  "backend": {
+    "runtime": "node",
+    "entry": "backend/index.mjs",
+    "lifecycle": "on-demand"
   }
 }
