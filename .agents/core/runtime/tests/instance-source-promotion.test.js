@@ -11,6 +11,7 @@ import {installedManifest} from '../src/distribution/manifests.js';
 import {writeAtomic,readRegular} from '../src/distribution/files.js';
 import {prepareContribution,submitContribution} from '../src/distribution/contribute.js';
 import {template} from './helpers/instance-fixture.js';
+import {runtimeLayoutPath} from '../src/platform/runtime-bundle.js';
 test('new plan targets core-main while keeping an old main baseline and projects only canonical CI', async t => {
   const f = await distributionFixture(t); commitWorkspace(f); const receipt=installedManifest(f.workspace);
   receipt.core.branch='main';writeAtomic(join(f.workspace,'.agents/core/release.json'),JSON.stringify(receipt));
@@ -69,12 +70,17 @@ test('a verified archive folder inside another Git repository never renames the 
 
 
 test('legacy copied instances can correct a foreign platform using the same exact Core release',async t=>{
-  const f=await distributionFixture(t,{compact:true}),receipt=installedManifest(f.workspace),native=receipt.platform;
-  receipt.platform=native==='win32-x64'?'darwin-arm64':'win32-x64';writeAtomic(join(f.workspace,'.agents/core/release.json'),JSON.stringify(receipt));
-  const api=new ForkAPI({coreRoot:f.root}),source=join(f.first.output,'ksf-core-index.json');
-  const check=await systemCheck({root:f.workspace,source,api});
+  const f=await distributionFixture(t,{compact:true}),native=installedManifest(f.workspace).platform;
+  // A copied legacy release predates target-specific runtime bundles. Freeze
+  // that source policy before building its receipt instead of relabelling a
+  // new bundle as a platform absent from its immutable source declaration.
+  rmSync(join(f.root,runtimeLayoutPath));git(f.root,['add','--',runtimeLayoutPath]);git(f.root,['commit','-m','Synthetic legacy runtime layout']);
+  const legacy=await buildRelease({root:f.root,platform:native,output:join(f.directory,'legacy-copy')}),root=legacy.instance,receipt=installedManifest(root);
+  receipt.platform=native==='win32-x64'?'darwin-arm64':'win32-x64';writeAtomic(join(root,'.agents/core/release.json'),JSON.stringify(receipt));
+  const api=new ForkAPI({coreRoot:f.root}),source=join(legacy.output,'ksf-core-index.json');
+  const check=await systemCheck({root,source,api});
   assert.equal(check.platform,native);assert.equal(check.available,true);assert.equal(check.platformSwitch,true);
-  const item=f.first.index.platforms[native].core;
-  await systemUpdate({root:f.workspace,from:join(f.first.output,item.name),api});
-  assert.equal(installedManifest(f.workspace).platform,native);assert.equal(installedManifest(f.workspace).core.revision,receipt.core.revision);
+  const item=legacy.index.platforms[native].core;
+  await systemUpdate({root,from:join(legacy.output,item.name),api});
+  assert.equal(installedManifest(root).platform,native);assert.equal(installedManifest(root).core.revision,receipt.core.revision);
 });

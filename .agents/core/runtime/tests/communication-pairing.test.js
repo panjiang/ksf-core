@@ -27,7 +27,9 @@ test('one request and one approval mutually pin identities and grant only the se
  assert.equal((await f.b.pairing.answer({requestId:out.requestId,accept:true,appId:APP})).status,'accepted');
  for(const [node,other] of [[f.a,f.states[1]],[f.b,f.states[0]]]){const cfg=await node.store.config();assert.equal(cfg.peers[other.identity.nodeId].fingerprint,other.identity.fingerprint);assert.equal(cfg.peers[other.identity.nodeId].name,node===f.a?'设备 B':'设备 A');assert.deepEqual(cfg.grants,{[APP+'|'+CHANNEL]:{peers:[other.identity.nodeId],activation:true}});}
  const material=await f.a.registerMaterial({kind:'app',id:APP},Readable.from(['paired message'])),op=await f.a.send({kind:'app',id:APP},{operationId:randomUUID(),to:{nodeId:f.states[1].identity.nodeId,endpoint:{kind:'app',id:APP}},channel:CHANNEL,payloadPartId:'body',parts:[{partId:'body',materialId:material.materialId}]});
- let state;for(let n=0;n<100;n++){state=await f.a.getOperation({kind:'app',id:APP},op.operationId);if(['delivered','failed'].includes(state.status))break;await new Promise(r=>setTimeout(r,10));}assert.equal(state.status,'delivered',JSON.stringify(state.error));
+ // Wait for the sender's durable confirmation, which is distinct from peer
+ // acceptance and can take longer than one second on a Windows CI filesystem.
+ const deadline=performance.now()+10000;let state;do{state=await f.a.getOperation({kind:'app',id:APP},op.operationId);if(['delivered','failed'].includes(state.status))break;await new Promise(r=>setTimeout(r,25));}while(performance.now()<deadline);assert.equal(state.status,'delivered',JSON.stringify(state));
 });
 test('rejecting and expiry never add trust or receive grants',async t=>{
  const f=await fixture(t);await f.a.pairing.request(f.input);await f.b.pairing.answer({requestId:f.input.requestId,accept:false,appId:APP});await f.a.pairing.poll();assert.equal((await f.a.pairing.list())[0].status,'rejected');
