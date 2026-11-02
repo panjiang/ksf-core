@@ -13,8 +13,8 @@ import {terminalText} from './helpers/platform.js';
 import {launchAgentBelongsToRoot,windowsLoginStartupJob} from '../src/platform/service.js';
 import {powershell,encodedCommand} from '../src/platform/windows.js';
 
-test('both adapters implement the same native-operation contract',()=>{
-  for(const name of ['darwin','win32']){
+test('all adapters implement the same native-operation contract',()=>{
+  for(const name of ['darwin','win32','linux']){
     const adapter=platformServices(name);
     for(const method of ['reserveDirectoryRename','validSegment','tool','launcher','hookCommand','desktopEndpoint','desktopCandidates','openURI','processStart','terminate'])assert.equal(typeof adapter[method],'function',`${name}.${method}`);
   }

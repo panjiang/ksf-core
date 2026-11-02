@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createServer, createConnection } from 'node:net';
 import {
   chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync,
   readdirSync, realpathSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync,
@@ -11,10 +12,11 @@ import { afterEach, beforeEach, test, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
-describe('POSIX shell runtime bootstrap',{skip:process.platform!=='darwin'?'Windows native ZIP/PowerShell counterpart: bootstrap-windows.ps1':false},()=>{
+describe('POSIX shell runtime bootstrap',{skip:!['darwin','linux'].includes(process.platform)?'Windows native ZIP/PowerShell counterpart: bootstrap-windows.ps1':false},()=>{
 const runtime = fileURLToPath(new URL('../', import.meta.url));
 const repo = fileURLToPath(new URL('../../../../', import.meta.url));
-const platform = 'darwin-arm64';
+const platform = process.platform==='linux'?'linux-x64':'darwin-'+(process.arch==='x64'?'x64':'arm64');
+const hashTool = process.platform==='linux'?'sha256sum':'shasum';
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 
 class Fixture {
@@ -28,6 +30,8 @@ class Fixture {
     mkdirSync(this.path('.agents/core/runtime/src'), { recursive: true });
     writeFileSync(this.path('.agents/core/runtime/src/cli.js'), '// fixture business entry\n');
     copyFileSync(join(runtime, 'bootstrap.sh'), this.path('.agents/core/runtime/bootstrap.sh'));
+    mkdirSync(this.path('.agents/core/runtime/tools'),{recursive:true});
+    copyFileSync(join(runtime,'tools/bootstrap-config.py'),this.path('.agents/core/runtime/tools/bootstrap-config.py'));
     this.release = this.makeRelease('99.0.0');
     this.writeManifest(this.release);
   }
@@ -40,6 +44,7 @@ if [ "$1" = '--version' ]; then
   [ -z "\${KSF_TEST_TRACE-}" ] || printf 'node-version\\n' >> "$KSF_TEST_TRACE"
   printf 'v${version}\\n'
 else
+  if [ -n "\${KSF_TEST_REAL_NODE-}" ]; then exec "$KSF_TEST_REAL_NODE" "$@"; fi
   printf '{"version":"v${version}","nodePath":"%s"}\\n' "$0"
 fi
 `);
@@ -109,9 +114,9 @@ runtime:
     return readdirSync(folder).filter(name => existsSync(join(folder, name, '.install-record')));
   }
 
-  start(args, env = {}, detached = false) {
+  start(args, env = {}, detached = false, stdio) {
     const child = spawn(this.launcher, args, {
-      env: { ...process.env, PATH: '/usr/bin:/bin', ...env }, detached,
+      env: { ...process.env, PATH: '/usr/bin:/bin', ...env }, detached, stdio,
     });
     const state = { child, detached };
     this.children.add(state);
@@ -143,6 +148,14 @@ runtime:
   }
 }
 
+function assertLocksReleased() {
+  const directory=fixture.path('.agents/runtime-data/runtime/locks');
+  for(const name of readdirSync(directory).filter(name=>name.endsWith('.lock'))){
+    assert.equal(process.platform,'linux');
+    assert.equal(spawnSync('/usr/bin/flock',['-n',join(directory,name),'/usr/bin/true']).status,0);
+  }
+}
+
 let fixture;
 beforeEach(() => { fixture = new Fixture(); });
 afterEach(async () => { await fixture?.cleanup(); });
@@ -154,17 +167,62 @@ test('first call prepares runtime without installed Node', () => {
   assert.ok(existsSync(join(dirname(dirname(node)), '.install-record')));
 });
 
+test('Linux build can bootstrap without a generated manifest', {skip:process.platform!=='linux'}, () => {
+  const release=fixture.release;
+  unlinkSync(fixture.path('.agents/core/manifest.yaml'));
+  const config={schema_version:1,runtime:{version:release.version,packages:{[platform]:{archive_path:release.archivePath,archive_sha256:release.archiveSha256}}}};
+  writeFileSync(fixture.path('.agents/core/build.json'),JSON.stringify(config));
+  const result=fixture.cli(['build','--json']);
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(JSON.parse(result.stdout).version,'v99.0.0');
+  writeFileSync(fixture.path('.agents/core/build.json'),JSON.stringify(config).replace('"schema_version":1','"schema_version":1,"schema_version":1'));
+  assert.match(fixture.cli(['build']).stderr,/BUILD_CONFIG_INVALID/);
+});
+
 test('warm start does not hash, extract or spawn a version check', () => {
   const node = fixture.install();
   const record = join(dirname(dirname(node)), '.install-record');
   const before = statSync(record, { bigint: true }).mtimeNs;
   const trace = fixture.path('trace');
-  const env = { ...fixture.tools({ shasum: 'exit 91\n', tar: 'exit 92\n' }), KSF_TEST_TRACE: trace };
+  const env = { ...fixture.tools({ [hashTool]: 'exit 91\n', tar: 'exit 92\n' }), KSF_TEST_TRACE: trace };
   const result = fixture.cli(undefined, env);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, '');
   assert.equal(statSync(record, { bigint: true }).mtimeNs, before);
   assert.equal(existsSync(trace), false);
+});
+
+test('Linux preserves an inherited listener at FD 9 through cold, warm, verify and repair starts', {skip:process.platform!=='linux'}, async () => {
+  writeFileSync(fixture.path('.agents/core/runtime/src/cli.js'), `
+import {createServer} from 'node:net';
+const server=createServer(socket=>{socket.end('inherited-listener');server.close();});
+server.listen({fd:Number(process.env.KSF_WEB_LISTEN_FD)},()=>console.log('listening'));
+`);
+  for(const mode of ['cold','warm','verify','repair']){
+    if(mode==='repair')writeFileSync(fixture.path('.agents/runtime-data/runtime/node/'+fixture.installedRecords()[0]+'/bin/node'),'damaged');
+    const listener=createServer();
+    await new Promise(resolve=>listener.listen(0,'127.0.0.1',resolve));
+    const port=listener.address().port;
+    const stdio=['ignore','pipe','pipe',...Array(6).fill('ignore'),listener._handle.fd];
+    const state=fixture.start(mode==='verify'?['runtime','verify']:['web'],{
+      KSF_TEST_REAL_NODE:process.execPath,KSF_WEB_LISTEN_FD:'9',
+    },false,stdio);
+    await new Promise(resolve=>listener.close(resolve));
+    await Promise.race([
+      new Promise(resolve=>state.child.stdout.once('data',resolve)),
+      state.completed.then(result=>assert.fail(`${mode}: listener exited before ready: ${result.stderr}`)),
+    ]);
+    assertLocksReleased(); // The CLI is still running, with no runtime lock held.
+    const response=await new Promise((resolve,reject)=>{
+      const socket=createConnection({host:'127.0.0.1',port});let data='';
+      socket.setTimeout(5_000,()=>socket.destroy(Error('Inherited listener timed out')));
+      socket.setEncoding('utf8').on('data',chunk=>{data+=chunk;});
+      socket.once('error',reject);socket.once('end',()=>resolve(data));
+    });
+    assert.equal(response,'inherited-listener',mode);
+    const result=await state.completed;
+    assert.equal(result.status,0,`${mode}: ${result.stderr}`);
+  }
 });
 
 test('empty PATH uses system tools without global Node', () => {
@@ -186,7 +244,7 @@ test('version upgrade and rollback retain both installations', () => {
   assert.ok(existsSync(oldNode));
   assert.equal(JSON.parse(fixture.cli().stdout).version, 'v99.1.0');
   fixture.writeManifest(fixture.release);
-  const result = fixture.cli(undefined, fixture.tools({ shasum: 'exit 91\n', tar: 'exit 92\n' }));
+  const result = fixture.cli(undefined, fixture.tools({ [hashTool]: 'exit 91\n', tar: 'exit 92\n' }));
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).nodePath, oldNode);
 });
@@ -202,7 +260,7 @@ test('same version with a new archive uses a new installation', () => {
 test('source-only change reuses the installed runtime', () => {
   const node = fixture.install();
   writeFileSync(fixture.path('.agents/core/runtime/src/cli.js'), '// updated business entry\n');
-  const result = fixture.cli(undefined, fixture.tools({ shasum: 'exit 91\n', tar: 'exit 92\n' }));
+  const result = fixture.cli(undefined, fixture.tools({ [hashTool]: 'exit 91\n', tar: 'exit 92\n' }));
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).nodePath, node);
 });
@@ -213,13 +271,13 @@ test('changed file attributes verify Node without unpacking', () => {
   utimesSync(node, stat.atime, new Date(stat.mtimeMs + 10_000));
   const trace = fixture.path('hash-trace');
   const env = { ...fixture.tools({ tar: 'exit 92\n',
-    shasum: 'printf "%s\\n" "$3" >> "$KSF_TEST_TRACE"\nexec /usr/bin/shasum "$@"\n' }), KSF_TEST_TRACE: trace };
+    [hashTool]: `printf '%s\\n' "$${process.platform==='linux'?'1':'3'}" >> "$KSF_TEST_TRACE"\nexec /usr/bin/${hashTool} "$@"\n` }), KSF_TEST_TRACE: trace };
   const result = fixture.cli(undefined, env);
   assert.equal(result.status, 0, result.stderr);
   const lines = readFileSync(trace, 'utf8').trim().split('\n');
   assert.ok(lines.includes(node));
   assert.equal(lines.some(line => line.endsWith('.tar.gz')), false);
-  const again = fixture.cli(undefined, fixture.tools({ shasum: 'exit 91\n', tar: 'exit 92\n' }));
+  const again = fixture.cli(undefined, fixture.tools({ [hashTool]: 'exit 91\n', tar: 'exit 92\n' }));
   assert.equal(again.status, 0, again.stderr);
 });
 
@@ -250,7 +308,7 @@ test('bad upgrade fails without running or deleting the old Node', () => {
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /ARCHIVE_INVALID/);
   assert.ok(existsSync(oldNode));
-  assert.equal(readdirSync(fixture.path('.agents/runtime-data/runtime/locks')).some(name => name.endsWith('.lock')), false);
+  assertLocksReleased();
 });
 
 test('wrong Node hash fails before execution', () => {
@@ -289,7 +347,7 @@ test('stale PID lock is recovered', () => {
   const identity = `99.0.0-${platform}-${fixture.release.archiveSha256}`;
   writeFileSync(join(locks, `${identity}.lock`), '99999999\n');
   fixture.install();
-  assert.equal(readdirSync(locks).some(name => name.endsWith('.lock')), false);
+  assertLocksReleased();
 });
 
 test('concurrent calls unpack once', async () => {

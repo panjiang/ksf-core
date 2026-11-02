@@ -1,8 +1,8 @@
-# macOS 与 Windows 平台边界
+# 平台边界
 
 Core 的业务协议、对象/项目、能力路由、聊天状态、任务归档、应用、AI、通信与升级事务共用 JavaScript 实现。CLI、HTTP 和应用 SDK 调用相同服务，不各自维护 Windows 业务分支。
 
-依赖方向：入口 → 业务服务 → 平台接口 → 原生实现。接口装配在 `runtime/src/platform/index.js`，具体实现位于 `darwin.js`、`windows.js`；包描述由 `catalog.js` 集中管理。`shared` 可调用平台基础操作，平台不得反向依赖业务服务。静态依赖检查见 `runtime/tests/runtime-layers.test.js`。
+依赖方向：入口 → 业务服务 → 平台接口 → 原生实现。接口装配在 `runtime/src/platform/index.js`，具体实现位于 `darwin.js`、`windows.js`、`linux.js`；包描述由 `catalog.js` 集中管理。`shared` 可调用平台基础操作，平台不得反向依赖业务服务。静态依赖检查见 `runtime/tests/runtime-layers.test.js`。
 
 | 边界 | 共享契约 | 平台实现 |
 | --- | --- | --- |
@@ -58,3 +58,7 @@ Mac 可使用 `ssh -N -L 1313:127.0.0.1:1313 user@windows-host`，然后访问 `
 - `context.storage.read(name)` 返回 `{exists,text,etag,path}`；`write(name,text,{ifMatch?})` 返回 `{etag,path}`。宿主限定到调用应用的数据目录，只接受普通 `.json/.md/.txt` 文件和 8 MiB 以内文本；同目录原子替换、fsync、原生重试及进程锁共用实现。ifMatch 可为 null，表示文件须尚不存在；冲突保留原件。SDK `createJSONStore` 继续负责业务校验、迁移和 revision，通过宿主保存。独立 Node 测试的旧 context 保留便携式文件后备实现。
 
 `runtime/native/node-pty` 是工作台原生依赖，MIT 许可与上游来源随包。重建：在 `runtime/native-build` 以锁文件运行 npm ci，然后使用随包 Node 执行 `runtime/tools/vendor-pty.mjs`。原生模块不再进入终端应用包。宿主适配器的真实执行范围仍为本轮 Mac ARM64 与 Windows x64。
+
+## Linux 核心开发目标
+
+Linux x64/glibc（含 WSL2）提供核心 CLI、构建、测试与后台 HTTP。桌面、原生终端与登录自启动暂不支持；开发运行目标与正式发行目标分开。环境前置条件、能力边界和验证入口见 [Linux 说明](linux.md)。

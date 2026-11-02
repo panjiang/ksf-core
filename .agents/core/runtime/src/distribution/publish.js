@@ -7,6 +7,7 @@ import { inspectCoreArchive } from './release.js';
 import { GitHubAPI } from './github.js';
 import { download } from './network.js';
 import { products, artifactName, releaseIndexName, legacyReleaseIndexName, compatibilityIndex } from './products.js';
+import {releaseTargets} from '../platform/catalog.js';
 
 export function inspectReleaseDirectory(root, directory) {
   const config = configuration(root), bytes = readRegular(directory, releaseIndexName), index = parseJSON(bytes, 'Release index');
@@ -15,13 +16,14 @@ export function inspectReleaseDirectory(root, directory) {
   const artifacts = [];
   let targets;
   for (const [platform, selected] of Object.entries(index.platforms)) {
+    if(!releaseTargets.includes(platform))fail('PLATFORM_UNSUPPORTED', `Official release is not supported for ${platform}.`);
     if (Object.keys(selected).length !== 1 || !selected.core) fail('RELEASE_INVALID', 'Only the Core artifact may be published.');
     const descriptor = selected.core;
     if (descriptor.name !== artifactName('core', index.version, platform) || descriptor.url !== `https://github.com/${config.core_repository}/releases/download/v${index.version}/${descriptor.name}`) fail('RELEASE_INVALID', 'Unexpected release asset identity.');
     const data = readRegular(directory, descriptor.name);
     if (data.length !== descriptor.size || sha256(data) !== descriptor.sha256) fail('RELEASE_INVALID', `Artifact changed after the build: ${descriptor.name}.`);
     const core = inspectCoreArchive(data, { expectedVersion: index.version, expectedPlatform: platform, expectedRepository: config.core_repository });
-    const declared = Object.keys(parseJSON(core.entries.get('.agents/core/build.json').bytes, 'frozen build.json').runtime?.packages ?? {}).sort();
+    const declared = Object.keys(parseJSON(core.entries.get('.agents/core/build.json').bytes, 'frozen build.json').runtime?.packages ?? {}).filter(target=>releaseTargets.includes(target)).sort();
     if (targets && targets.join('\n') !== declared.join('\n')) fail('RELEASE_INVALID', 'Platform packages declare different frozen targets.');
     targets = declared;
     if (core.manifest.core.revision !== index.core_revision || core.manifest.core.branch !== config.core_branch || core.manifest.development) fail('RELEASE_INVALID', 'Artifact source differs from the configured stable Core line.');

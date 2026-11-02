@@ -6,6 +6,7 @@ import {createConfigurationService} from './configuration.js';
 import {canonical,expectConfig,withConfigLock} from '../configuration/storage.js';
 import {ensureService,openWorkbench,serviceStatus} from './service-manager.js';
 import {controlRequest} from '../communication/client.js';
+import {platformCapabilities,requirePlatformCapability} from '../platform/index.js';
 
 const subset=(current,desired)=>Object.entries(desired).every(([key,value])=>canonical(current.values[key])===canonical(value));
 const errorReceipt=error=>({code:error.code??'INCUBATION_APPLY_FAILED',message:error.message??'配置应用失败。'});
@@ -43,12 +44,12 @@ export function createIncubationService(root,adapters={}) {
     const draft=state.values.draft??{},label=draft.userLabel;
     return {userLabel:label??null,instanceName:draft.instanceName??actual.instance.values.name??(label?`${short(label)}的 KSF`:null),
       deviceName:draft.deviceName??(actual.device.state==='present'?actual.device.values.name:label?`${short(label)}的 ${process.platform==='darwin'?'Mac':process.platform==='win32'?'Windows 电脑':'电脑'}`:null),
-      autostart:draft.autostart??actual.service.values.autostart??true};
+      autostart:draft.autostart??actual.service.values.autostart??platformCapabilities.loginStartup};
   }
   async function read(){
     const state=readState(),actual=await configs(),proposed=candidate(state,actual);
     return {...state,candidate:proposed,actual,missing:state.values.status==='pending'?Object.entries(proposed).filter(([,value])=>value===null).map(([key])=>key):[],
-      workbenchUrl:state.values.operation?.workbench.url??`http://127.0.0.1:${actual.service.details.port}/`,root,handoff:'ksf context entry --json'};
+      capabilities:platformCapabilities,workbenchUrl:state.values.operation?.workbench.url??`http://127.0.0.1:${actual.service.details.port}/`,root,handoff:'ksf context entry --json'};
   }
   function requirePending(state){if(state.values.status!=='pending')throw incubationError('INCUBATION_NOT_PENDING','当前实例未处于孵化中；保留现有配置，不自动重新孵化。');}
   function save(state,patch){
@@ -57,6 +58,8 @@ export function createIncubationService(root,adapters={}) {
   }
   async function write({values,ifMatch,dryRun=false}){
     validateIncubationDraft(values);
+    if(values.autostart===true)requirePlatformCapability('loginStartup');
+    if(values.openWorkbench===true)requirePlatformCapability('openURI');
     const action=async()=>{
       const state=readState();expectConfig(state,ifMatch);requirePending(state);
       const draft={...state.values.draft,...values};validateIncubationDraft(draft);
@@ -75,6 +78,8 @@ export function createIncubationService(root,adapters={}) {
       targets.push({domain,values:patch,beforeEtag:actual[domain].etag});
     };
     if(kind==='finish'){
+      if(values.autostart===true)requirePlatformCapability('loginStartup');
+      if(draft.openWorkbench===true)requirePlatformCapability('openURI');
       if(!values.userLabel||!values.instanceName||!values.deviceName)throw incubationError('INCUBATION_INCOMPLETE','请提供用户称呼，并确定实例名称和本机名称。');
       if(draft.userText!==undefined)expectConfig(actual['collaboration.user'],draft.userEtag);
       const text=draft.userText??userWithLabel(actual['collaboration.user'].values.text??'',values.userLabel);
@@ -84,7 +89,7 @@ export function createIncubationService(root,adapters={}) {
     // Explicit saved capture choices win; only a new instance gets this default.
     if(draft.captureEnabled!==undefined||actual.capture.state==='missing')target('capture',{enabled:draft.captureEnabled??true});
     for(const item of targets)await configuration.check(item.domain,{values:item.values,ifMatch:item.beforeEtag});
-    return {id:randomUUID(),kind,targets,steps:{},workbench:{state:kind==='skip'||draft.openWorkbench===false?'suppressed':'pending'}};
+    return {id:randomUUID(),kind,targets,steps:{},workbench:{state:kind==='skip'||draft.openWorkbench===false||!platformCapabilities.openURI?'suppressed':'pending'}};
   }
   function checkState(state){expectConfig(readState(),state.etag);}
   async function runTargets(state){
@@ -139,7 +144,12 @@ export function createIncubationService(root,adapters={}) {
         if(!dryRun&&kind==='finish')state=await openOnce(state);
         return {...state,dryRun,alreadyFinished:true,handoff:'ksf context entry --json'};
       }
-      requirePending(state);let operation=state.values.operation;
+      requirePending(state);
+      if(kind==='finish'){
+        if(candidate(state,await configs()).autostart===true)requirePlatformCapability('loginStartup');
+        if(state.values.draft?.openWorkbench===true)requirePlatformCapability('openURI');
+      }
+      let operation=state.values.operation;
       if(operation&&operation.kind!==kind){
         if(kind==='finish')throw incubationError('INCUBATION_OPERATION_CONFLICT','当前正在恢复跳过操作，请先继续 skip。');
         operation=null; // Explicit skip does not resume remaining finish steps.

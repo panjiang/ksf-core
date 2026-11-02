@@ -92,7 +92,7 @@ Core 源码不保存真实 USER、BOT、个人目录或占位文件。通用实�
 .agents/ksf release publish <发行目录> --json
 ```
 
-build 要求纯系统、准确且干净的 Core 提交；正式发布来自 `core-main`。默认覆盖 build.json 声明的所有平台，每平台只生成一个 Core 压缩包；Mac 发布器无需执行 Windows 二进制即可构建 Windows 包。单平台 --platform 用于检查，正式发布拒绝缺少声明平台的索引；索引 schema 2 的 products 为 core=ksf-core、instance=ksf，各 platform 只允许 core 描述符。旧 schema 1 索引仅供升级兼容读取，不能作为新发布输入。
+build 要求纯系统、准确且干净的 Core 提交；正式发布来自 `core-main`。默认覆盖 build.json 声明的正式发行平台（开发专用目标除外），每平台只生成一个 Core 压缩包；Mac 发布器无需执行 Windows 二进制即可构建 Windows 包。单平台 --platform 用于检查，正式发布拒绝缺少声明平台的索引；索引 schema 2 的 products 为 core=ksf-core、instance=ksf，各 platform 只允许 core 描述符。旧 schema 1 索引仅供升级兼容读取，不能作为新发布输入。
 
 产物含 `ksf-core-<版本>-<平台>.tar.gz`、`ksf-core-index.json` 和本地检查目录 `ksf/`。构建校验系统白名单、提交内容、权限及重现性，不收集用户目录；发布重新校验全部资产。多平台发行索引必须包含所有准备的平台，最终交接冻结 Core SHA 和索引 SHA256。
 
@@ -111,6 +111,16 @@ gh workflow run release.yml --repo yinbaiyuan/ksf-core --ref core-main
 release 工作流只有验证、准备与一个 Core 发布作业。准备校验官方 Core 已标为 Template repository、默认分支为 `core-main`，确认最终提交属于该主线，构建一次并上传冻结资产。发布作业使用 Core 自身 GITHUB_TOKEN，只给该作业 contents:write，按 artifact ID 下载并核对摘要后发布。没有 Workspace 作业、定时镜像、跨仓库 GitHub App 或模板秘密。
 
 发布先创建或核对不可变 tag、草稿 Release，校验已存在资产后只补缺失项；全部核实后公开。上传响应丢失可用同一包重试并对账，不重复上传、不替换已公开资产；已公开不完整包要发布新版本。内部恢复工具仅下载精确标签已公开的 Core 资产，验证 tag、索引、摘要及来源，不从 latest 重打包或修改旧 Release。
+
+## 按目标平台携带运行时
+
+源码工程保留完整的 build.json 可信声明和多平台构建材料。由 `distribution/runtime-layout.json` 的固定 v1 策略启用目标平台打包：每个 Core 归档及本地检查实例只包含目标平台的一个 Node 归档，按 build.json 中该平台的准确 `archive_path` 选择，允许源码保留同平台旧版本归档。生成的 manifest.yaml 也只声明该平台。build.json 保持来源提交原文，不能为精简产物改写可信来源声明。
+
+发行构建核对完整来源工作树，各平台的输入摘要必须一致；产物清单与归档摘要按实际平台内容计算。发布索引仍须覆盖所有正式目标，不能用单平台包冒充完整发行。归档检查拒绝缺失目标归档、额外平台归档或运行时清单与目标不一致。
+
+已安装发行实例重建清单时，依据现有发行凭据选择对应目标，不要求其他平台的归档。源码工程和 schema 5 模板实例继续校验全部声明的构建材料。schema 4 小型凭据的原始基线从固定 Core 提交树验证策略文件的准确内容和模式，再读取并核对同一提交的 build.json Git 对象，按其准确声明选择归档；不使用实例内可能被修改的声明。凭据格式保持不变，策略出现前的旧提交仍按完整树比较。源声明、普通系统文件与原生归档的完整性保护保持有效。
+
+从旧多平台包升级时，沿原事务比较并移除未改动的多余归档；本地修改触发冲突，回滚恢复旧包和旧归档。目标平台包跨系统复制后不具备新宿主的 Node，必须先取得新宿主对应的系统包并保留个人资料，不能直接运行旧平台入口完成切换。旧多平台包仍按原跨平台检查流程处理。
 
 ## 迁移与验收
 

@@ -15,7 +15,7 @@ import { project } from './projects.js';
 import { readRoute } from './routes.js';
 import { readChatContext } from './chat.js';
 import { readTask } from './tasks.js';
-import { platform as nativePlatform } from '../platform/index.js';
+import { platform as nativePlatform,platformCapabilities,requirePlatformCapability } from '../platform/index.js';
 
 export const CONVERSATION_METHODS = ['check', 'create', 'attach', 'read', 'history', 'send', 'events', 'interrupt', 'answer', 'openDesktop', 'operation','executionFiles'];
 const validId = id => typeof id === 'string' && /^[A-Za-z0-9_-]{8,128}$/.test(id);
@@ -28,6 +28,11 @@ const operationView = op => { const { hash, hashVersion, pid, instance, inputDig
 const pool = new Map();
 
 export function createCodexConversations(root, options = {}) {
+  if(!platformCapabilities.desktop){
+    const unsupported=async()=>requirePlatformCapability('desktop');
+    return {...Object.fromEntries(CONVERSATION_METHODS.map(method=>[method,unsupported])),monitorInterrupt:unsupported,
+      async monitorSnapshot(){return {tasks:[],owners:[],issues:[{source:'conversations',code:'PLATFORM_UNSUPPORTED',message:'当前平台暂不支持 Codex Desktop 联动。'}]};},async close(){}};
+  }
   root = realpathSync(root);
   // A root has one bridge even if more than one HTTP surface is mounted.
   if (!options.isolated && pool.has(root)) { const item = pool.get(root); item.refs++; return item.service; }

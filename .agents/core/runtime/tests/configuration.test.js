@@ -111,14 +111,14 @@ test('HTTP and local CLI bridge use one service, enforce sessions and return con
   assert.equal((await f.service.read('instance')).values.name,'浏览器保存');
  }finally{await server.close();}
 });
-test('saved-but-failed service application is visible and retry uses the saved version',async t=>{
+test('saved-but-failed service application is visible and retry uses the saved version',{skip:process.platform==='linux'?'Linux rejects login startup before saving; linux.test.js covers this boundary.':false},async t=>{
  const f=fixture(t);let failed=true;
  const service={async autostart(input){const before=readConfigFile(f.root,'.agents/runtime-data/service/policy.json');if(before.document?.autostart!==input.enabled)publishConfigFile(f.root,before,{schemaVersion:1,port:1313,autostart:input.enabled});if(failed)throw Object.assign(Error('模拟登录启动权限拒绝'),{code:'FIXTURE_STARTUP_DENIED',data:{saved:true}});}};
  const center=createConfigurationService(f.root,{service});
  const result=await center.perform('service','write',{values:{autostart:true},ifMatch:'missing'});assert.equal(result.saved,true);assert.equal(result.application.state,'failed');assert.equal(result.values.autostart,true);
  failed=false;const retried=await center.perform('service','apply',{ifMatch:result.etag});assert.equal(retried.application.state,'immediate');assert.equal(retried.etag,result.etag);
 });
-test('real CLI starts a managed backend without frontend assets and round-trips AI configuration',{skip:process.platform!=='darwin'},async t=>{
+test('real CLI starts a managed backend without frontend assets and round-trips AI configuration',{skip:!['darwin','linux'].includes(process.platform)},async t=>{
  const f=fixture(t),core=fileURLToPath(new URL('../../',import.meta.url));
  const listener=createServer();await new Promise(resolve=>listener.listen(0,'127.0.0.1',resolve));const port=listener.address().port;await new Promise(resolve=>listener.close(resolve));
  f.put('.agents/runtime-data/service/policy.json',JSON.stringify({schemaVersion:1,port,autostart:false}));

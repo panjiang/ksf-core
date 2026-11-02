@@ -18,7 +18,7 @@ function fixture(t) {
   writeFileSync(join(root, runtime, 'src/input.js'), 'export const value=1;');
   const make = (name, suite = 'quick', code = "import{test}from'node:test';test('owned case',()=>{});") => {
     const path = `${runtime}/tests/${name}.test.js`; writeFileSync(join(root, path), code);
-    return { id: name, owner: 'core', covers: ['core'], path, suite, platforms: ['darwin', 'win32'], cacheable: true, inputs: [`${runtime}/src`], requirements: [], timeoutMs: 10000, seconds: { darwin: 1, win32: 1 } };
+    return { id: name, owner: 'core', covers: ['core'], path, suite, platforms: ['darwin', 'win32', 'linux'], cacheable: true, inputs: [`${runtime}/src`], requirements: [], timeoutMs: 10000, seconds: { darwin: 1, win32: 1 } };
   };
   const catalog = { schemaVersion: 1, components: { core: { directory: runtime, testRoots: [`${runtime}/tests`] } }, risks: [{ paths: [`${runtime}/src/shared`], components: ['core'], reason: 'shared mechanics' }], tests: [make('fast'), make('slow', 'full')] };
   const save = () => writeFileSync(join(root, catalogPath), JSON.stringify(catalog)); save();

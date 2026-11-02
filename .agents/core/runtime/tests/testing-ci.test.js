@@ -75,6 +75,7 @@ test('release proof trust excludes PRs, foreign repositories, other workflows an
 });
 test('CI persists failed assertions and startup errors as reports without certifying coverage',async t=>{
  const root=proofFixture(t),report=join(root,'failed.report.json');
+ {const linuxCatalog=JSON.parse(readFileSync(join(root,catalogPath),'utf8'));linuxCatalog.tests[0].platforms.push('linux');writeFileSync(join(root,catalogPath),JSON.stringify(linuxCatalog));}
  writeFileSync(join(root,'.agents/core/runtime/package.json'),'{"type":"module"}');
  writeFileSync(join(root,'.agents/core/runtime/tests/a.test.js'),"import{test}from'node:test';test('expected CI assertion',()=>{throw Error('EXPECTED_CI_FAILURE')});\n");
  assert.equal(await runVerification(root,['--suite','full'],report),1);
@@ -94,6 +95,7 @@ test('CI persists failed assertions and startup errors as reports without certif
 });
 test('CI rejects source edits outside the selected test inputs and still writes their report',async t=>{
  const root=proofFixture(t),report=join(root,'changed.report.json');
+ {const linuxCatalog=JSON.parse(readFileSync(join(root,catalogPath),'utf8'));linuxCatalog.tests[0].platforms.push('linux');writeFileSync(join(root,catalogPath),JSON.stringify(linuxCatalog));}
  mkdirSync(join(root,'.github/workflows'),{recursive:true});writeFileSync(join(root,'.github/workflows/check.yml'),'name: before\n');
  assert.equal(spawnSync(gitBinary,['-C',root,'add','.github']).status,0);
  writeFileSync(join(root,'.agents/core/runtime/package.json'),'{"type":"module"}');
@@ -104,6 +106,7 @@ test('CI rejects source edits outside the selected test inputs and still writes 
 });
 test('CI cancellation preserves its status and report while stopping the owned file',async t=>{
  const root=proofFixture(t),report=join(root,'cancelled.report.json'),marker=join(root,'started');
+ {const linuxCatalog=JSON.parse(readFileSync(join(root,catalogPath),'utf8'));linuxCatalog.tests[0].platforms.push('linux');writeFileSync(join(root,catalogPath),JSON.stringify(linuxCatalog));}
  writeFileSync(join(root,'.agents/core/runtime/package.json'),'{"type":"module"}');
  writeFileSync(join(root,'.agents/core/runtime/tests/a.test.js'),`import{test}from'node:test';import{writeFileSync}from'node:fs';test('wait',()=>{writeFileSync(${JSON.stringify(marker)},'ready');return new Promise(()=>{setInterval(()=>{},1000)})});\n`);
  const pending=runVerification(root,['--suite','full'],report);

@@ -2,13 +2,19 @@ import { renameSync,rmSync,openSync,fsyncSync,closeSync } from 'node:fs';
 import { rename, open } from 'node:fs/promises';
 import { darwin } from './darwin.js';
 import { windows } from './windows.js';
+import { linux } from './linux.js';
 
 export function platformServices(name = process.platform) {
   if (name === 'darwin') return darwin;
   if (name === 'win32') return windows;
+  if (name === 'linux') return linux;
   throw Object.assign(new Error(`Unsupported platform: ${name}`), { code: 'PLATFORM_UNSUPPORTED' });
 }
 export const platform = platformServices();
+export const platformCapabilities = platform.capabilities ?? Object.freeze({terminal:true,desktop:true,openURI:true,loginStartup:true});
+export function requirePlatformCapability(name) {
+  if(!platformCapabilities[name])throw Object.assign(new Error(`当前平台不支持 ${name}。`),{code:'PLATFORM_UNSUPPORTED'});
+}
 export const gitExecutable = platform.tool('git');
 export function launcherInvocation(root, args) { return platform.launcher(root, args); }
 export function selectEnvironment(env, allowed) {

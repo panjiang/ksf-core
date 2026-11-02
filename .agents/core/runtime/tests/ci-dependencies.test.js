@@ -26,7 +26,7 @@ test('CI prepares locked toolchains once per platform and restores them before f
   assert.ok(!full.some(s => /npm (?:test|ci)|release build|npm run build/.test(s.run ?? '')));
   for (const step of [...setup,...full]) assert.ok(!step.env?.NODE_OPTIONS);
   const check = YAML.parse(readFileSync(join(directory, 'check.yml'), 'utf8'));
-  assert.equal(check.jobs.required.if, "always() && github.repository == 'yinbaiyuan/ksf-core'");assert.deepEqual(check.jobs.required.needs, ['plan','verification']);
+  assert.equal(check.jobs.required.if, "always() && github.repository == 'yinbaiyuan/ksf-core'");assert.deepEqual(check.jobs.required.needs, ['plan','verification','linux-core']);
   assert.ok(!check.on.pull_request.paths && !check.on.push.paths);
 });
 
@@ -98,3 +98,13 @@ test('CI Node environment flags can start the bundled runtime before selecting t
   }
   assert.equal(checked, 0, "Test selection must use explicit CLI flags, never NODE_OPTIONS.");
 });
+
+ test('Linux core CI uses native Ubuntu and the verified bundled runtime',()=>{
+  const check=YAML.parse(readFileSync(join(repositoryWorkflows(),'check.yml'),'utf8'));
+  const linux=check.jobs['linux-core'];
+  assert.deepEqual(linux.strategy.matrix.os,['ubuntu-22.04','ubuntu-24.04']);
+  assert.equal(linux['runs-on'],'${{ matrix.os }}');
+  assert.ok(linux.steps.some(s=>/\.agents\/ksf runtime verify --json/.test(s.run??'')));
+  assert.ok(linux.steps.some(s=>/test --suite full --component core/.test(s.run??'')));
+  assert.ok(linux.steps.some(s=>s.if==='always()'&&s.with?.name==='linux-core-${{ matrix.os }}'));
+ });

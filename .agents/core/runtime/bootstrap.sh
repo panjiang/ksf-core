@@ -77,10 +77,18 @@ ksf_read_build_config() {
   # JSON input before Node.js exists; package hashes are trusted build inputs.
   ksf_config="$KSF_ROOT/.agents/core/build.json"
   [ -f "$ksf_config" ] && [ ! -L "$ksf_config" ] || ksf_fail BUILD_CONFIG_INVALID 'Missing .agents/core/build.json.'
+  if [ "$KSF_PLATFORM" = linux-x64 ]; then
+    [ -x /usr/bin/python3 ] || ksf_fail BUILD_CONFIG_INVALID 'Linux build requires Python 3; normal startup does not.'
+    ksf_build_metadata=$(/usr/bin/python3 "$KSF_ROOT/.agents/core/runtime/tools/bootstrap-config.py" "$ksf_config" "$KSF_PLATFORM") || ksf_fail BUILD_CONFIG_INVALID 'Cannot read Linux build configuration.'
+    IFS='|' read -r KSF_NODE_VERSION ksf_archive_path ksf_archive_sha <<EOF
+$ksf_build_metadata
+EOF
+  else
   [ "$(/usr/bin/plutil -extract schema_version raw -o - "$ksf_config")" = 1 ] || ksf_fail BUILD_CONFIG_INVALID 'Unsupported build schema.'
   KSF_NODE_VERSION=$(/usr/bin/plutil -extract runtime.version raw -o - "$ksf_config") || ksf_fail BUILD_CONFIG_INVALID 'Missing Node.js version.'
   ksf_archive_path=$(/usr/bin/plutil -extract "runtime.packages.$KSF_PLATFORM.archive_path" raw -o - "$ksf_config") || ksf_fail BUILD_CONFIG_INVALID 'No build package for this platform.'
   ksf_archive_sha=$(/usr/bin/plutil -extract "runtime.packages.$KSF_PLATFORM.archive_sha256" raw -o - "$ksf_config") || ksf_fail BUILD_CONFIG_INVALID 'Missing trusted package SHA256.'
+  fi
   printf '%s|%s|%s\n' "$KSF_NODE_VERSION" "$ksf_archive_path" "$ksf_archive_sha" | awk -F'|' '
     NF!=3 || $1 !~ /^[0-9]+\.[0-9]+\.[0-9]+$/ ||
     $2 !~ /^\.agents\/core\/runtime\/packages\/[A-Za-z0-9_.-]+\.tar\.gz$/ || $2 ~ /\.\./ ||
@@ -101,7 +109,11 @@ ksf_read_build_config() {
 }
 
 ksf_fingerprint() {
-  stat -f '%z:%m:%c:%i:%p' "$1"
+  if [ "$KSF_PLATFORM" = linux-x64 ]; then
+    stat -c '%s:%Y:%Z:%i:%f' "$1"
+  else
+    stat -f '%z:%m:%c:%i:%p' "$1"
+  fi
 }
 
 ksf_probe_install() {
@@ -113,7 +125,7 @@ ksf_probe_install() {
     { if (NF!=2 || seen[$1]++) exit 1; value[$1]=$2 }
     END {
       if (NR!=6 || value["protocol"]!="1" || value["version"]!=version || value["platform"]!=platform ||
-          value["archive_sha256"]!=archive || value["node_sha256"]!=node || value["fingerprint"] !~ /^[0-9:]+$/) exit 1
+          value["archive_sha256"]!=archive || value["node_sha256"]!=node || value["fingerprint"] !~ /^[0-9a-f:]+$/) exit 1
       print value["fingerprint"]
     }' "$ksf_install/.install-record") || return 0
   ksf_current_fingerprint=$(ksf_fingerprint "$KSF_NODE") || return 0
@@ -122,7 +134,11 @@ ksf_probe_install() {
 }
 
 ksf_sha256() {
-  ksf_hash_output=$(LC_ALL=C shasum -a 256 "$1") || return 1
+  if [ "$KSF_PLATFORM" = linux-x64 ]; then
+    ksf_hash_output=$(LC_ALL=C sha256sum "$1") || return 1
+  else
+    ksf_hash_output=$(LC_ALL=C shasum -a 256 "$1") || return 1
+  fi
   printf '%s\n' "${ksf_hash_output%% *}"
 }
 
@@ -144,7 +160,11 @@ ksf_write_record() {
 
 ksf_release_lock() {
   if [ "$ksf_lock_owned" = 1 ]; then
-    rm -f "$ksf_lock"
+    if [ "$KSF_PLATFORM" = linux-x64 ]; then
+      exec 9>&-
+    else
+      rm -f "$ksf_lock"
+    fi
     ksf_lock_owned=0
   fi
 }
@@ -157,17 +177,24 @@ ksf_cleanup() {
 
 ksf_lock_runtime() {
   mkdir -p "$ksf_runtime_home/node" "$ksf_runtime_home/staging" "$ksf_runtime_home/locks"
+  ksf_lock="$ksf_runtime_home/locks/$ksf_identity.lock"
+  [ ! -L "$ksf_lock" ] || ksf_fail UNSAFE_PATH 'Runtime lock is a symbolic link.'
+  if [ "$KSF_PLATFORM" = linux-x64 ]; then
+    [ -x /usr/bin/flock ] || ksf_fail LOCK_UNAVAILABLE 'Linux runtime preparation requires flock.'
+    exec 9>"$ksf_lock"
+    /usr/bin/flock -w 30 9 || ksf_fail LOCK_TIMEOUT 'Timed out waiting for runtime preparation.'
+  else
   # macOS supplies shlock: atomic link-based PID locks with stale-owner recovery.
   # Wait is bounded; an unrelated process reusing a stale PID cannot cause an
   # indefinite wait or an unsafe lock steal.
   [ -x /usr/bin/shlock ] || ksf_fail LOCK_UNAVAILABLE 'This platform requires the native shlock utility.'
-  ksf_lock="$ksf_runtime_home/locks/$ksf_identity.lock"
   ksf_attempt=0
   until /usr/bin/shlock -f "$ksf_lock" -p "$$"; do
     ksf_attempt=$((ksf_attempt + 1))
     [ "$ksf_attempt" -lt 300 ] || ksf_fail LOCK_TIMEOUT 'Timed out waiting for runtime preparation.'
     sleep 0.1
   done
+  fi
   ksf_lock_owned=1
   # With this identity's lock held, no live preparer can own these directories.
   # Recover leftovers from untrappable interruption such as SIGKILL.
@@ -213,6 +240,23 @@ ksf_install_runtime() {
   fi
 }
 
+ksf_prepare_locked_runtime() {
+  ksf_lock_runtime
+  ksf_probe_install
+  if [ "$ksf_force_verify" = 1 ]; then ksf_check_archive; fi
+  if [ "$ksf_probe" = changed ] || { [ "$ksf_probe" = ready ] && [ "$ksf_force_verify" = 1 ]; }; then
+    if ksf_verify_node "$KSF_NODE"; then
+      ksf_write_record "$ksf_install"
+      ksf_probe=ready
+    else
+      ksf_probe=missing
+    fi
+  fi
+  if [ "$ksf_probe" != ready ]; then ksf_install_runtime; fi
+  ksf_cleanup
+  ksf_stage=''
+}
+
 ksf_prepare_runtime() {
   unset KSF_BOOTSTRAP_VERIFIED
   ksf_lock_owned=0
@@ -227,7 +271,8 @@ ksf_prepare_runtime() {
   case "$ksf_system-$ksf_machine" in
     Darwin-arm64) KSF_PLATFORM=darwin-arm64 ;;
     Darwin-x86_64) KSF_PLATFORM=darwin-x64 ;;
-    *) ksf_fail UNSUPPORTED_PLATFORM 'This prototype currently supports macOS with a bundled package.' ;;
+    Linux-x86_64) KSF_PLATFORM=linux-x64 ;;
+    *) ksf_fail UNSUPPORTED_PLATFORM 'Supported bundled targets: macOS ARM64 and Linux x64; Windows x64 uses ksf.ps1.' ;;
   esac
   if [ "${1-}" = build ]; then ksf_read_build_config; else ksf_read_manifest; fi
   [ -f "$KSF_CLI" ] || ksf_fail CLI_MISSING 'The declared JavaScript entry is missing.'
@@ -235,20 +280,18 @@ ksf_prepare_runtime() {
   if [ "${1-}" = runtime ] && [ "${2-}" = verify ]; then ksf_force_verify=1; fi
   ksf_probe_install
   if [ "$ksf_probe" != ready ] || [ "$ksf_force_verify" = 1 ]; then
-    ksf_lock_runtime
-    ksf_probe_install
-    if [ "$ksf_force_verify" = 1 ]; then ksf_check_archive; fi
-    if [ "$ksf_probe" = changed ] || { [ "$ksf_probe" = ready ] && [ "$ksf_force_verify" = 1 ]; }; then
-      if ksf_verify_node "$KSF_NODE"; then
-        ksf_write_record "$ksf_install"
-        ksf_probe=ready
-      else
-        ksf_probe=missing
-      fi
+    if [ "$KSF_PLATFORM" = linux-x64 ]; then
+      # flock's descriptor belongs only to this preparation subshell. The
+      # launcher must preserve every caller-owned descriptor for the CLI.
+      (
+        trap 'ksf_cleanup' EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM HUP
+        ksf_prepare_locked_runtime
+      )
+    else
+      ksf_prepare_locked_runtime
     fi
-    if [ "$ksf_probe" != ready ]; then ksf_install_runtime; fi
-    ksf_cleanup
-    ksf_stage=''
   fi
   if [ "$ksf_force_verify" = 1 ]; then
     KSF_BOOTSTRAP_VERIFIED=1

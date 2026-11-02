@@ -43,12 +43,37 @@ jobs:
     uses: ./.github/workflows/verification.yml
     with:
       full: ${{ needs.plan.outputs.full == 'true' }}
+  linux-core:
+    if: github.repository == 'yinbaiyuan/ksf-core'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Verify Linux bundled runtime and build inputs
+        run: |
+          .agents/ksf build --json > /dev/null
+          .agents/ksf runtime verify --json
+          .agents/ksf context entry --json > /dev/null
+      - name: Run Linux core coverage
+        run: .agents/ksf test --suite full --component core --json > linux-core-report.json
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: linux-core-${{ matrix.os }}
+          include-hidden-files: true
+          path: |
+            linux-core-report.json
+            .agents/runtime-data/tests/
   required:
     if: always() && github.repository == 'yinbaiyuan/ksf-core'
-    needs: [plan, verification]
+    needs: [plan, verification, linux-core]
     runs-on: macos-15
     steps:
       - env:
           PLAN: ${{ needs.plan.result }}
           VERIFICATION: ${{ needs.verification.result }}
-        run: test "$PLAN" = success && test "$VERIFICATION" = success
+          LINUX_CORE: ${{ needs.linux-core.result }}
+        run: test "$PLAN" = success && test "$VERIFICATION" = success && test "$LINUX_CORE" = success

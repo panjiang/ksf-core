@@ -1,5 +1,6 @@
 // Distribution identities are portable. Native filenames stay at this boundary.
-export const supportedTargets = Object.freeze(['darwin-arm64', 'darwin-x64', 'win32-x64']);
+export const releaseTargets = Object.freeze(['darwin-arm64', 'darwin-x64', 'win32-x64']);
+export const supportedTargets = Object.freeze([...releaseTargets, 'linux-x64']);
 
 export function runtimePackage(target, version) {
   if (!supportedTargets.includes(target)) throw Object.assign(new Error(`Unsupported runtime target: ${target}`), { code: 'PLATFORM_UNSUPPORTED' });
